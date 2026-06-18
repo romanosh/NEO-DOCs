@@ -1,0 +1,6 @@
+__pycache__/
+.jwt_secret
+*.pyc
+.env
+neo_setup_dump.sql
+-w
