@@ -413,15 +413,17 @@ def serve_html():
     return send_file(HTML_PATH)
 
 
-if __name__ == '__main__':
-    # Check tables exist on startup
+if __name__ != '__main__':
+    pass  # gunicorn import path
+else:
+    port = int(os.environ.get('PORT', 5050))
     try:
         c = sb_count('menu_item')
         LOG(f'SUPABASE: {c} itens de menu, {sb_count("usuario")} usu\u00e1rios, {sb_count("page")} p\u00e1ginas.')
     except Exception as e:
         LOG(f'ERRO ao conectar no Supabase: {e}')
         sys.exit(1)
-    https_status = 'SIM' if os.environ.get('HTTPS') else 'NÃO'
-    LOG(f'SERVIDOR INICIADO em http://0.0.0.0:5050/ (HTTPS={https_status}).')
-    app.run(host='0.0.0.0', port=5050, ssl_context='adhoc' if os.environ.get('HTTPS') else None,
+    https_status = 'SIM' if os.environ.get('HTTPS') else 'N\u00c3O'
+    LOG(f'SERVIDOR INICIADO em http://0.0.0.0:{port}/ (HTTPS={https_status}).')
+    app.run(host='0.0.0.0', port=port, ssl_context='adhoc' if os.environ.get('HTTPS') else None,
             debug=bool(os.environ.get('FLASK_DEBUG', '')))
