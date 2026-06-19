@@ -910,10 +910,13 @@ async function refreshUserList() {
 }
 
 async function supabaseRpc(funcName, params) {
+  const ctrl = new AbortController();
+  const tmr = setTimeout(() => ctrl.abort(), 15000);
   const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + funcName, {
     method: 'POST', headers: getAuthHeaders(),
-    body: JSON.stringify(params || {})
-  });
+    body: JSON.stringify(params || {}),
+    signal: ctrl.signal
+  }).finally(() => clearTimeout(tmr));
   if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.message || d.hint || 'RPC error'); }
   const text = await r.text();
   return text ? JSON.parse(text) : null;
