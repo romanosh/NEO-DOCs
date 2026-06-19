@@ -991,7 +991,7 @@ function flattenTree(nodes, parentTempId) {
   nodes.forEach((node, i) => {
     const tempId = 't' + flat.length;
     const isPage = !Array.isArray(node.c);
-    flat.push({ id: node.id || null, tempId, name: node.l, parentTempId, sortOrder: i, isPage });
+    flat.push({ id: node.id || null, tempId, name: node.l, parentTempId, sortOrder: i, isPage, nodeRef: node });
     if (node.c) { flat.push(...flattenTree(node.c, tempId)); }
   });
   return flat;
@@ -1029,6 +1029,13 @@ async function saveTree() {
           p_sort_order: item.sortOrder, p_is_page: item.isPage
         });
         usedIds.push({ tempId: item.tempId, id: realId });
+      }
+    }
+    // Write back inserted IDs to tree nodes so new pages get menu_item_id
+    for (const item of flat) {
+      const mapping = usedIds.find(x => x.tempId === item.tempId);
+      if (mapping && item.nodeRef && !item.nodeRef.id) {
+        item.nodeRef.id = mapping.id;
       }
     }
     // Delete orphans — items that were in DB but are no longer in tree (cascade handles children & pages)
