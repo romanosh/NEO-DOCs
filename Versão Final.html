@@ -2506,30 +2506,37 @@ function markManualCol(tbl, ci) { let s = manualColsWM.get(tbl); if (!s) { s = n
 function unmarkManualCol(tbl, ci) { const s = manualColsWM.get(tbl); if (s) s.delete(ci); }
 
 function initTableResize() {
+  const admin = isAdmin();
   document.querySelectorAll('.pe-section table').forEach(tbl => {
     tbl.querySelectorAll('tr').forEach(tr => {
       Array.from(tr.cells).forEach(c => {
         let h = c.querySelector('.col-resize-handle');
-        if (!h) {
-          h = document.createElement('div');
-          h.className = 'col-resize-handle';
-          c.appendChild(h);
-        }
-        if (!h._resizeListeners) {
-          h.addEventListener('mousedown', startColResize);
-          h.addEventListener('dblclick', autoFitColumn);
-          h._resizeListeners = true;
+        h && (h.style.display = admin ? '' : 'none');
+        if (admin) {
+          if (!h) {
+            h = document.createElement('div');
+            h.className = 'col-resize-handle';
+            c.appendChild(h);
+          }
+          if (!h._resizeListeners) {
+            h.addEventListener('mousedown', startColResize);
+            h.addEventListener('dblclick', autoFitColumn);
+            h._resizeListeners = true;
+          }
         }
         h = c.querySelector('.row-resize-handle');
-        if (!h) {
-          h = document.createElement('div');
-          h.className = 'row-resize-handle';
-          c.appendChild(h);
-        }
-        if (!h._resizeListeners) {
-          h.addEventListener('mousedown', startRowResize);
-          h.addEventListener('dblclick', autoFitRow);
-          h._resizeListeners = true;
+        h && (h.style.display = admin ? '' : 'none');
+        if (admin) {
+          if (!h) {
+            h = document.createElement('div');
+            h.className = 'row-resize-handle';
+            c.appendChild(h);
+          }
+          if (!h._resizeListeners) {
+            h.addEventListener('mousedown', startRowResize);
+            h.addEventListener('dblclick', autoFitRow);
+            h._resizeListeners = true;
+          }
         }
       });
     });
@@ -2537,6 +2544,7 @@ function initTableResize() {
 }
 
 function startColResize(e) {
+  if (!isAdmin()) return;
   e.preventDefault();
   const cell = e.target.closest('td, th');
   if (!cell) return;
@@ -2606,6 +2614,7 @@ function autoFitCellDimensions(cell) {
 }
 
 function autoFitColumn(e) {
+  if (!isAdmin()) return;
   e.preventDefault();
   endColResize();
   const cell = e.target.closest('td, th');
@@ -2616,6 +2625,7 @@ function autoFitColumn(e) {
 }
 
 function startRowResize(e) {
+  if (!isAdmin()) return;
   e.preventDefault();
   const cell = e.target.closest('td, th');
   if (!cell) return;
@@ -2647,6 +2657,7 @@ function endRowResize() {
 }
 
 function autoFitRow(e) {
+  if (!isAdmin()) return;
   e.preventDefault();
   endRowResize();
   const cell = e.target.closest('td, th');
