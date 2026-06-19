@@ -1277,6 +1277,12 @@ function showDeleteModal(node, parentArr) {
 async function confirmDelete() {
   try {
     if (!pendingDelParentArr || !pendingDelNode) return;
+    // Rede de segurança: deleta páginas diretamente antes de remover o nó
+    // Garante que páginas sejam removidas mesmo se CASCADE falhar
+    const delIds = collectMenuItemIds(pendingDelNode);
+    if (delIds.length > 0) {
+      await supabaseRpc('admin_delete_pages_by_menu_item_ids', { p_ids: delIds });
+    }
     const idx = pendingDelParentArr.indexOf(pendingDelNode);
     if (idx !== -1) pendingDelParentArr.splice(idx, 1);
     await saveTree();
@@ -1312,6 +1318,16 @@ async function confirmDelete() {
   } catch(e) {
     alert('Erro ao deletar: ' + (e.message || e));
   }
+}
+
+// ── UTIL: coleta recursivamente todos os IDs de menu_item de um nó e seus descendentes ──
+function collectMenuItemIds(node) {
+  const ids = [];
+  (function walk(n) {
+    if (n.id) ids.push(n.id);
+    if (n.c) n.c.forEach(walk);
+  })(node);
+  return ids;
 }
 
 // ── ÍCONES ──
