@@ -1031,16 +1031,14 @@ async function saveTree() {
         usedIds.push({ tempId: item.tempId, id: realId });
       }
     }
-    // Write back IDs to tree nodes (tanto novos quanto existentes)
-    for (const item of flat) {
-      const mapping = usedIds.find(x => x.tempId === item.tempId);
-      if (mapping && item.nodeRef) {
-        item.nodeRef.id = mapping.id;
-      }
-    }
     // Delete orphans — items that were in DB but are no longer in tree (cascade handles children & pages)
     const keep = usedIds.filter(x => x.id).map(x => x.id);
     await supabaseRpc('admin_delete_orphan_menu_items', { p_keep_ids: keep });
+    // Recarrega árvore do banco para garantir que TODOS os nós tenham ID correto
+    const fresh = await loadTree();
+    if (fresh && fresh.length > 0) {
+      tree = fresh;
+    }
   } catch(e) {
     alert('Erro ao salvar árvore: ' + (e.message || e));
     console.error(e);
