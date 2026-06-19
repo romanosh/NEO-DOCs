@@ -861,6 +861,7 @@ async function confirmLogout() {
     }).catch(() => {});
   }
   setCurrentUser(null, null);
+  localStorage.removeItem(APP_STATE_KEY);
   document.getElementById('loginOverlay').classList.remove('hidden');
   document.getElementById('userAvatar').style.display = 'none';
   activeEl = null;
@@ -1073,6 +1074,7 @@ function toggleSidebar() {
   btn.innerHTML = sidebarCollapsed
     ? `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5l4.5 4.5L6 12.5" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
     : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3.5l-4.5 4.5L10 12.5" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  saveAppState();
 }
 
 function collapseAllInside(ni) {
@@ -1354,6 +1356,7 @@ function render(nodes, depth, parent, pathSoFar, parentArr) {
         else if (openByDepth[depth] === wrap) delete openByDepth[depth];
 
         updateBreadcrumb([...pathSoFar, node.l]);
+        saveAppState();
       });
 
     } else {
@@ -1376,6 +1379,7 @@ function render(nodes, depth, parent, pathSoFar, parentArr) {
         activeEl = row;
         updateBreadcrumb([...pathSoFar, node.l]);
         await openPageEditor(node, [...pathSoFar, node.l]);
+        saveAppState();
       });
     }
 
@@ -2930,6 +2934,103 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// ── STATE PERSIST (keep position after F5) ──
+const APP_STATE_KEY = 'neo_app_state';
+
+function saveAppState() {
+  try {
+    const state = {};
+    const sidebar = document.getElementById('sidebar');
+    state.sidebarCollapsed = sidebar ? sidebar.classList.contains('collapsed') : false;
+    state.openNodes = saveOpenState();
+    state.currentPageKey = currentPageKey || null;
+
+    // Reconstruct fullPath from tree if a page is open
+    if (currentPageKey && activeEl) {
+      const activeLbl = activeEl.querySelector('.lbl')?.textContent;
+      if (activeLbl) {
+        const path = [];
+        let el = activeEl.closest('.ni');
+        while (el) {
+          const lbl = el.querySelector(':scope > .nl > .lbl');
+          if (lbl) path.unshift(lbl.textContent);
+          el = el.parentElement?.closest('.ni');
+        }
+        state.fullPath = path;
+      }
+    }
+    localStorage.setItem(APP_STATE_KEY, JSON.stringify(state));
+  } catch(e) {}
+}
+
+function findNodeByPath(nodes, path) {
+  if (!path || !path.length) return null;
+  for (const n of nodes) {
+    if (n.l === path[0]) {
+      if (path.length === 1) return n;
+      if (n.c) return findNodeByPath(n.c, path.slice(1));
+    }
+  }
+  return null;
+}
+
+function restoreAppState() {
+  try {
+    const raw = localStorage.getItem(APP_STATE_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+
+    // Restore sidebar
+    if (state.sidebarCollapsed) {
+      sidebarCollapsed = true;
+      const sidebar = document.getElementById('sidebar');
+      if (sidebar) sidebar.classList.add('collapsed');
+      const btn = document.getElementById('toggleBtn');
+      if (btn) { btn.title = 'Abrir menu'; btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3.5l4.5 4.5L6 12.5" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+    }
+
+    // Restore open tree nodes (after rebuildNav)
+    if (state.openNodes) {
+      // expand saved nodes in multiple passes to handle nesting
+      for (let pass = 0; pass < 5; pass++) {
+        let changed = false;
+        document.querySelectorAll('#nav .ni').forEach(ni => {
+          if (state.openNodes[ni.dataset.label]) {
+            const sub = ni.querySelector(':scope > .children');
+            const arr = ni.querySelector(':scope > .nl > .arr');
+            if (sub && !sub.classList.contains('open')) { sub.classList.add('open'); changed = true; }
+            if (arr && !arr.classList.contains('open')) { arr.classList.add('open'); changed = true; }
+          }
+        });
+        if (!changed) break;
+      }
+    }
+
+    // Restore current page
+    if (state.fullPath && state.currentPageKey && tree) {
+      const node = findNodeByPath(tree, state.fullPath);
+      if (node && !node.c) {
+        const sidebar = document.getElementById('sidebar');
+        // ensure parents are expanded for the active node
+        const pathStr = state.fullPath.slice(0, -1).map(s => s.toLowerCase());
+        document.querySelectorAll('#nav .ni').forEach(ni => {
+          if (pathStr.includes(ni.dataset.label)) {
+            const sub = ni.querySelector(':scope > .children');
+            const arr = ni.querySelector(':scope > .nl > .arr');
+            if (sub) sub.classList.add('open');
+            if (arr) arr.classList.add('open');
+          }
+        });
+        openPageEditor(node, state.fullPath);
+      }
+    }
+  } catch(e) {}
+}
+
+// Save state on page hide
+window.addEventListener('pagehide', saveAppState);
+window.addEventListener('beforeunload', saveAppState);
+
 // Inicialização
 (async function() {
   const currentUser = getCurrentUser();
@@ -2941,6 +3042,7 @@ document.addEventListener('click', function(e) {
   }
   tree = await loadTree();
   rebuildNav();
+  restoreAppState();
 })();
 </script>
 </body>
