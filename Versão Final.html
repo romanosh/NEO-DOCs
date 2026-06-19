@@ -396,6 +396,17 @@
   .pe-section td .row-resize-handle.active,
   .pe-section th .row-resize-handle.active { background: rgba(0,0,0,0.15); }
 
+  /* Table search bar */
+  .table-search-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .table-search-wrap h2 { flex: 1; margin-bottom: 0; }
+  .table-search-input {
+    padding: 4px 8px; border: 1px solid var(--border2, #ccc);
+    border-radius: 4px; font-size: 12px; font-family: inherit;
+    background: var(--surface, #fff); color: var(--text, #333);
+    outline: none; width: 180px; flex-shrink: 0;
+  }
+  .table-search-input:focus { border-color: var(--accent, #3498db); }
+
   /* Context menu for tables */
   .ctx-menu { position: fixed; z-index: 9999; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width: 180px; padding: 4px 0; display: none; overflow: hidden; }
   .ctx-menu.open { display: block; }
@@ -1711,6 +1722,7 @@ async function openPageEditor(node, fullPath) {
       }
     });
     initTableResize();
+    initTableSearch();
     // Remove botões antigos das seções existentes, substituindo controles
     body.querySelectorAll('.pe-section').forEach(section => {
       let controls = section.querySelector('.pe-section-controls');
@@ -1852,6 +1864,7 @@ function peAddTable() {
   if (tbl) {
     tbl.querySelectorAll('tr').forEach(r => autoFitRowHeight(r));
     initTableResize();
+    initTableSearch();
   }
   peAutoSave();
 }
@@ -2667,10 +2680,46 @@ function autoFitRow(e) {
   autoFitRowHeight(tr);
 }
 
-// Init resize handles whenever tables are modified
+// Init search bars for table sections
+function initTableSearch() {
+  document.querySelectorAll('#peBody .pe-section').forEach(section => {
+    const scroll = section.querySelector('.table-scroll');
+    if (!scroll) return;
+    if (section.querySelector('.table-search-wrap')) return;
+    const h2 = section.querySelector('h2');
+    if (!h2) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'table-search-wrap';
+    h2.parentNode.insertBefore(wrap, h2);
+    wrap.appendChild(h2);
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.className = 'table-search-input';
+    input.placeholder = 'Pesquisar na tabela...';
+    wrap.appendChild(input);
+    input.addEventListener('input', function() {
+      const q = this.value.toLowerCase().trim();
+      const table = scroll.querySelector('table');
+      if (!table) return;
+      const rows = table.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        if (!q) { row.style.display = ''; return; }
+        const match = Array.from(row.cells).some(cell =>
+          cell.textContent.toLowerCase().includes(q)
+        );
+        row.style.display = match ? '' : 'none';
+      });
+    });
+  });
+}
+
+// Init resize handles & search whenever tables are modified
 const _resizeObs = new MutationObserver(() => {
   clearTimeout(window._resizeInitTimer);
-  window._resizeInitTimer = setTimeout(initTableResize, 50);
+  window._resizeInitTimer = setTimeout(() => {
+    initTableResize();
+    initTableSearch();
+  }, 50);
 });
 
 function rebuildNav(preserveState = false) {
