@@ -880,14 +880,31 @@ async function refreshUserList() {
   const currentUser = getCurrentUser();
   list.innerHTML = users.map(u => {
     const isCurrent = currentUser && currentUser.nome === u.nome;
-    const roleLabel = u.role === 'admin' ? 'Admin' : 'Visualizar';
+    const opts = ['admin','user'].map(r =>
+      `<option value="${r}"${u.role===r?' selected':''}>${r==='admin'?'Admin':'Visualizar'}</option>`
+    ).join('');
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)">
       <span style="flex:1;font-size:13px;font-weight:500">${u.nome} <span style="font-size:11px;color:var(--text-tertiary)">${u.email}</span>${isCurrent ? ' <span style="color:var(--text-tertiary);font-size:11px">(atual)</span>' : ''}</span>
-      <span style="font-size:11px;color:var(--text-tertiary);background:var(--surface2);padding:2px 8px;border-radius:4px">${roleLabel}</span>
+      ${isCurrent
+        ? `<span style="font-size:11px;color:var(--text-tertiary);background:var(--surface2);padding:2px 8px;border-radius:4px">${u.role==='admin'?'Admin':'Visualizar'}</span>`
+        : `<select style="font-size:11px;padding:2px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text)" onchange="updateUserRole(${u.id},this.value)">
+            ${opts}
+          </select>`}
       ${isCurrent ? '' : `<button class="btn" style="height:28px;font-size:11px;padding:0 10px;margin-right:4px" onclick="resetUserPassword(${u.id},'${u.nome}')">Resetar Senha</button>`}
       ${isCurrent || u.nome === 'admin' ? '' : `<button class="btn" style="height:28px;font-size:11px;padding:0 10px;background:var(--danger);color:#fff;border-color:var(--danger)" onclick="deleteUser(${u.id})">Excluir</button>`}
     </div>`;
   }).join('');
+}
+
+async function updateUserRole(uid, role) {
+  try {
+    const r = await fetch('/api/users/' + uid + '/role', {
+      method: 'PUT', headers: authHeaders(),
+      body: JSON.stringify({ role })
+    });
+    if (!r.ok) { const d = await r.json(); alert(d.error || 'Erro'); return; }
+    refreshUserList();
+  } catch(e) { alert('Erro de conexão'); }
 }
 
 async function deleteUser(uid) {
@@ -934,8 +951,9 @@ async function addUserFromModal() {
 
 // ── PERSISTÊNCIA (PostgreSQL via backend Flask) ──
 async function loadTree() {
+  const headers = authHeaders();
   try {
-    const r = await fetch('/api/tree');
+    const r = await fetch('/api/tree', { headers });
     const t = await r.json();
     if (t && t.length) { t.forEach(n => { if (!n.c) n.c = []; }); return t; }
   } catch(e) {}
@@ -957,7 +975,7 @@ async function loadUsers() {
 }
 async function loadPageContent(key) {
   try {
-    const r = await fetch('/api/pages/' + encodeURIComponent(key));
+    const r = await fetch('/api/pages/' + encodeURIComponent(key), { headers: authHeaders() });
     const d = await r.json();
     return d.content || '';
   } catch(e) { return ''; }
@@ -2680,7 +2698,7 @@ function autoFitRow(e) {
   autoFitRowHeight(tr);
 }
 
-// Init search bars for table sections
+// Add search bar to table sections
 function initTableSearch() {
   document.querySelectorAll('#peBody .pe-section').forEach(section => {
     const scroll = section.querySelector('.table-scroll');
@@ -2697,23 +2715,34 @@ function initTableSearch() {
     input.className = 'table-search-input';
     input.placeholder = 'Pesquisar na tabela...';
     wrap.appendChild(input);
-    input.addEventListener('input', function() {
-      const q = this.value.toLowerCase().trim();
-      const table = scroll.querySelector('table');
-      if (!table) return;
-      const rows = table.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        if (!q) { row.style.display = ''; return; }
-        const match = Array.from(row.cells).some(cell =>
-          cell.textContent.toLowerCase().includes(q)
-        );
-        row.style.display = match ? '' : 'none';
-      });
-    });
   });
 }
 
-// Init resize handles & search whenever tables are modified
+// Filter table rows via delegated listener
+document.addEventListener('input', function(e) {
+  const input = e.target.closest('.table-search-input');
+  if (!input) return;
+  if (!input.closest('#peBody')) return;
+  const section = input.closest('.pe-section');
+  if (!section) return;
+  const scroll = section.querySelector('.table-scroll');
+  if (!scroll) return;
+  const table = scroll.querySelector('table');
+  if (!table) return;
+  const q = input.value.toLowerCase().trim();
+  const header = table.querySelector('thead');
+  for (let i = 0; i < table.rows.length; i++) {
+    const row = table.rows[i];
+    if (header && row.closest('thead')) continue;
+    if (!q) { row.style.display = ''; continue; }
+    const match = Array.from(row.cells).some(cell =>
+      (cell.textContent || '').toLowerCase().includes(q)
+    );
+    row.style.display = match ? '' : 'none';
+  }
+});
+
+// Init resize handles & search bars whenever tables are modified
 const _resizeObs = new MutationObserver(() => {
   clearTimeout(window._resizeInitTimer);
   window._resizeInitTimer = setTimeout(() => {
@@ -2846,7 +2875,6 @@ document.addEventListener('click', function(e) {
 
 // Inicialização
 (async function() {
-  tree = await loadTree();
   const currentUser = getCurrentUser();
   if (currentUser) {
     document.getElementById('loginOverlay').classList.add('hidden');
@@ -2854,6 +2882,7 @@ document.addEventListener('click', function(e) {
   } else {
     document.getElementById('userAvatar').style.display = 'none';
   }
+  tree = await loadTree();
   rebuildNav();
 })();
 </script>

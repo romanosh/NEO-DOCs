@@ -162,7 +162,8 @@ def _build_tree(items, parent_id=None):
 
 # ── API: Tree ──
 @app.route('/api/tree', methods=['GET'])
-def get_tree():
+@require_auth
+def get_tree(user=None):
     items = sb_select('menu_item', ['order=sort_order.asc'])
     items.sort(key=lambda x: (0 if x['parent_id'] is None else 1, x.get('parent_id') or 0, x['sort_order']))
     tree = _build_tree(items)
@@ -250,10 +251,26 @@ def reset_user_password(uid, user=None):
     LOG(f'POST /api/users/{uid}/reset-password (admin="{user["nome"]}"): senha de "{u["nome"]}" resetada.')
     return jsonify({'ok': True, 'password': DEFAULT_PASSWORD})
 
+@app.route('/api/users/<int:uid>/role', methods=['PUT'])
+@require_admin
+def update_user_role(uid, user=None):
+    u = sb_select_one('usuario', [f'id=eq.{uid}'])
+    if not u: return err('Usu\u00e1rio n\u00e3o encontrado', 404)
+    if u['id'] == user['id']:
+        return err('N\u00e3o pode alterar o pr\u00f3prio cargo')
+    new_role = request.json.get('role')
+    if new_role not in ('admin', 'user'):
+        return err('Cargo inv\u00e1lido. Use "admin" ou "user".')
+    old_role = u['role']
+    sb_update('usuario', 'id', uid, {'role': new_role})
+    LOG(f'PUT /api/users/{uid}/role (admin="{user["nome"]}"): "{u["nome"]}" alterado de "{old_role}" para "{new_role}".')
+    return jsonify({'ok': True})
+
 
 # ── API: Pages ──
 @app.route('/api/pages/<path:key>', methods=['GET'])
-def get_page(key):
+@require_auth
+def get_page(key, user=None):
     p = sb_select_one('page', [f'key=eq.{key}'])
     tamanho = len(p['content']) if p else 0
     LOG(f'GET /api/pages/...{key[-40:]} -> {"encontrada" if p else "NOVA (vazia)"} ({tamanho} chars).')
