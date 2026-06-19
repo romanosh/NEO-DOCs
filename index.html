@@ -866,6 +866,7 @@ async function confirmLogout() {
   document.getElementById('userAvatar').style.display = 'none';
   activeEl = null;
   currentPageKey = null;
+  currentMenuItemId = null;
   document.getElementById('breadcrumb').innerHTML = '<span>Home</span>';
   const main = document.getElementById('mainContent');
   main.classList.add('centered');
@@ -966,9 +967,9 @@ function rowsToTree(rows) {
   const roots = [];
   rows.forEach(r => {
     if (r.is_page) {
-      map[r.id] = { l: r.name };
+      map[r.id] = { id: r.id, l: r.name };
     } else {
-      map[r.id] = { l: r.name, c: [] };
+      map[r.id] = { id: r.id, l: r.name, c: [] };
     }
   });
   rows.forEach(r => {
@@ -987,7 +988,7 @@ function flattenTree(nodes, parentTempId) {
   nodes.forEach((node, i) => {
     const tempId = 't' + flat.length;
     const isPage = !Array.isArray(node.c);
-    flat.push({ tempId, name: node.l, parentTempId, sortOrder: i, isPage });
+    flat.push({ id: node.id || null, tempId, name: node.l, parentTempId, sortOrder: i, isPage });
     if (node.c) { flat.push(...flattenTree(node.c, tempId)); }
   });
   return flat;
@@ -1007,18 +1008,28 @@ async function loadTree() {
 async function saveTree() {
   if (!localStorage.getItem(TOKEN_KEY)) return;
   const flat = flattenTree(tree, null);
-  await supabaseRpc('admin_clear_menu');
-  const idMap = {};
+  const usedIds = [];
   for (const item of flat) {
-    const realParentId = item.parentTempId ? idMap[item.parentTempId] : null;
-    const realId = await supabaseRpc('admin_insert_menu_item', {
-      p_name: item.name,
-      p_parent_id: realParentId,
-      p_sort_order: item.sortOrder,
-      p_is_page: item.isPage
-    });
-    idMap[item.tempId] = realId;
+    const realParentId = item.parentTempId ? (usedIds.find(x => x.tempId === item.parentTempId)?.id || null) : null;
+    if (item.id) {
+      await supabaseRpc('admin_update_menu_item', {
+        p_id: item.id, p_name: item.name,
+        p_parent_id: realParentId,
+        p_sort_order: item.sortOrder,
+        p_is_page: item.isPage
+      });
+      usedIds.push({ tempId: item.tempId, id: item.id });
+    } else {
+      const realId = await supabaseRpc('admin_insert_menu_item', {
+        p_name: item.name, p_parent_id: realParentId,
+        p_sort_order: item.sortOrder, p_is_page: item.isPage
+      });
+      usedIds.push({ tempId: item.tempId, id: realId });
+    }
   }
+  // Delete orphans — items that were in DB but are no longer in tree (cascade handles children & pages)
+  const keep = usedIds.filter(x => x.id).map(x => x.id);
+  await supabaseRpc('admin_delete_orphan_menu_items', { p_keep_ids: keep });
 }
 
 async function loadUsers() {
@@ -1036,19 +1047,36 @@ async function loadPageContent(key) {
   return '';
 }
 
-async function savePageContent(key, html) {
+async function savePageContent(key, html, menuItemId) {
   try {
     const h = getAuthHeaders();
-    // Try insert
+    // Look up existing page by menu_item_id first (robust against renames)
+    if (menuItemId) {
+      const existRes = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id', { headers: h });
+      const existData = await existRes.json();
+      if (existData && existData[0]) {
+        // Update existing page (also update key in case of rename)
+        await fetch(SUPABASE_URL + '/rest/v1/page?id=eq.' + existData[0].id, {
+          method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ key, content: html, menu_item_id: menuItemId })
+        });
+        return;
+      }
+    }
+    // No existing page found, insert by key
+    const payload = { key, content: html };
+    if (menuItemId) payload.menu_item_id = menuItemId;
     const r = await fetch(SUPABASE_URL + '/rest/v1/page', {
       method: 'POST', headers: { ...h, 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ key, content: html })
+      body: JSON.stringify(payload)
     });
     if (r.status === 409) {
-      // Exists, update
+      // Exists by key, update
+      const patchPayload = { content: html };
+      if (menuItemId) patchPayload.menu_item_id = menuItemId;
       await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key), {
         method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
-        body: JSON.stringify({ content: html })
+        body: JSON.stringify(patchPayload)
       });
     }
   } catch(e) {
@@ -1225,38 +1253,6 @@ function showDeleteModal(node, parentArr) {
 
 async function confirmDelete() {
   if (!pendingDelParentArr || !pendingDelNode) return;
-
-  // Build full path from root to this node
-  function pathToNode(nodes, target, path) {
-    for (const n of nodes) {
-      if (n === target) return [...path, n.l];
-      if (n.c) {
-        const found = pathToNode(n.c, target, [...path, n.l]);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
-  const basePath = pathToNode(tree, pendingDelNode, []);
-  // Collect all leaf paths under this node
-  const leafPaths = [];
-  (function collectLeaves(node, path) {
-    if (!node.c) { leafPaths.push(path); }
-    else { node.c.forEach(ch => collectLeaves(ch, [...path, ch.l])); }
-  })(pendingDelNode, basePath);
-
-  if (leafPaths.length > 0) {
-    const keys = leafPaths.map(p => pageKey(p));
-    const h = getAuthHeaders();
-    for (const key of keys) {
-      try {
-        await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key), {
-          method: 'DELETE', headers: { ...h, 'Prefer': 'return=minimal' }
-        });
-      } catch(e) {}
-    }
-  }
-
   const idx = pendingDelParentArr.indexOf(pendingDelNode);
   if (idx !== -1) pendingDelParentArr.splice(idx, 1);
   await saveTree();
@@ -1272,6 +1268,7 @@ async function confirmDelete() {
     if (wasDeleted) {
       activeEl = null;
       currentPageKey = null;
+  currentMenuItemId = null;
       document.getElementById('breadcrumb').innerHTML = '<span>Home</span>';
       const main = document.getElementById('mainContent');
       main.classList.add('centered');
@@ -1436,6 +1433,7 @@ function resetToInitial() {
   if (activeEl) activeEl.classList.remove('active');
   activeEl = null;
   currentPageKey = null;
+  currentMenuItemId = null;
   document.getElementById('breadcrumb').innerHTML = '<span>Home</span>';
   const main = document.getElementById('mainContent');
   main.classList.add('centered');
@@ -1741,11 +1739,13 @@ function pageKey(path) {
 }
 
 let currentPageKey = null;
+let currentMenuItemId = null;
 let autoSaveTimer = null;
 
 async function openPageEditor(node, fullPath) {
   const key = pageKey(fullPath);
   currentPageKey = key;
+  currentMenuItemId = node.id || null;
 
   const main = document.getElementById('mainContent');
   main.classList.remove('centered');
@@ -1923,7 +1923,7 @@ function peAutoSave() {
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(async () => {
     if (!currentPageKey) return;
-    await savePageContent(currentPageKey, document.getElementById('peBody').innerHTML);
+    await savePageContent(currentPageKey, document.getElementById('peBody').innerHTML, currentMenuItemId);
     peUpdateTime();
   }, 600);
 }
@@ -2141,7 +2141,7 @@ async function confirmDelSec() {
     delSecCallback.remove();
     clearTimeout(autoSaveTimer);
     if (currentPageKey) {
-      await savePageContent(currentPageKey, document.getElementById('peBody').innerHTML);
+      await savePageContent(currentPageKey, document.getElementById('peBody').innerHTML, currentMenuItemId);
       peUpdateTime();
     }
   }
@@ -3079,3 +3079,6 @@ window.addEventListener('beforeunload', saveAppState);
 </script>
 </body>
 </html>
+
+
+
