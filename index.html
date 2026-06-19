@@ -1007,29 +1007,34 @@ async function loadTree() {
 
 async function saveTree() {
   if (!localStorage.getItem(TOKEN_KEY)) return;
-  const flat = flattenTree(tree, null);
-  const usedIds = [];
-  for (const item of flat) {
-    const realParentId = item.parentTempId ? (usedIds.find(x => x.tempId === item.parentTempId)?.id || null) : null;
-    if (item.id) {
-      await supabaseRpc('admin_update_menu_item', {
-        p_id: item.id, p_name: item.name,
-        p_parent_id: realParentId,
-        p_sort_order: item.sortOrder,
-        p_is_page: item.isPage
-      });
-      usedIds.push({ tempId: item.tempId, id: item.id });
-    } else {
-      const realId = await supabaseRpc('admin_insert_menu_item', {
-        p_name: item.name, p_parent_id: realParentId,
-        p_sort_order: item.sortOrder, p_is_page: item.isPage
-      });
-      usedIds.push({ tempId: item.tempId, id: realId });
+  try {
+    const flat = flattenTree(tree, null);
+    const usedIds = [];
+    for (const item of flat) {
+      const realParentId = item.parentTempId ? (usedIds.find(x => x.tempId === item.parentTempId)?.id || null) : null;
+      if (item.id) {
+        await supabaseRpc('admin_update_menu_item', {
+          p_id: item.id, p_name: item.name,
+          p_parent_id: realParentId,
+          p_sort_order: item.sortOrder,
+          p_is_page: item.isPage
+        });
+        usedIds.push({ tempId: item.tempId, id: item.id });
+      } else {
+        const realId = await supabaseRpc('admin_insert_menu_item', {
+          p_name: item.name, p_parent_id: realParentId,
+          p_sort_order: item.sortOrder, p_is_page: item.isPage
+        });
+        usedIds.push({ tempId: item.tempId, id: realId });
+      }
     }
+    // Delete orphans — items that were in DB but are no longer in tree (cascade handles children & pages)
+    const keep = usedIds.filter(x => x.id).map(x => x.id);
+    await supabaseRpc('admin_delete_orphan_menu_items', { p_keep_ids: keep });
+  } catch(e) {
+    alert('Erro ao salvar árvore: ' + (e.message || e));
+    console.error(e);
   }
-  // Delete orphans — items that were in DB but are no longer in tree (cascade handles children & pages)
-  const keep = usedIds.filter(x => x.id).map(x => x.id);
-  await supabaseRpc('admin_delete_orphan_menu_items', { p_keep_ids: keep });
 }
 
 async function loadUsers() {
@@ -1173,19 +1178,23 @@ function findParentArray(targetNode, arr) {
 }
 
 async function confirmEdit() {
-  const name = document.getElementById('modalEditInput').value.trim();
-  if (!name || !pendingEditNode) return;  
-  
-  // Validação: verifica se já existe um item com o mesmo nome no mesmo nível
-  if (nameExistsInArray(name, pendingEditParentArr, pendingEditNode)) {
-    alert(`Já existe um item com o nome "${name}" neste nível. Escolha outro nome.`);
-    return;
+  try {
+    const name = document.getElementById('modalEditInput').value.trim();
+    if (!name || !pendingEditNode) return;  
+    
+    // Validação: verifica se já existe um item com o mesmo nome no mesmo nível
+    if (nameExistsInArray(name, pendingEditParentArr, pendingEditNode)) {
+      alert(`Já existe um item com o nome "${name}" neste nível. Escolha outro nome.`);
+      return;
+    }
+    
+    pendingEditNode.l = name;
+    await saveTree();
+    closeModal('modalEdit');
+    rebuildNav(true);
+  } catch(e) {
+    alert('Erro ao renomear: ' + (e.message || e));
   }
-  
-  pendingEditNode.l = name;
-  await saveTree();
-  closeModal('modalEdit');
-  rebuildNav(true);
 }
 
 let selectedType = 'dir'; // 'dir' | 'page'
@@ -1221,27 +1230,31 @@ function showAddModalRoot() {
 }
 
 async function confirmAdd() {
-  const name = document.getElementById('modalInput').value.trim();
-  if (!name) return;
-  if (pendingAddNode && !Array.isArray(pendingAddNode.c)) { alert('Não é possível adicionar itens dentro de uma página.'); return; }
-  
-  // Validação: verifica se já existe um item com o mesmo nome no mesmo nível
-  const targetArr = pendingAddNode === null ? tree : (pendingAddNode.c || []);
-  if (nameExistsInArray(name, targetArr)) {
-    alert(`Já existe um item com o nome "${name}" neste nível. Escolha outro nome.`);
-    return;
+  try {
+    const name = document.getElementById('modalInput').value.trim();
+    if (!name) return;
+    if (pendingAddNode && !Array.isArray(pendingAddNode.c)) { alert('Não é possível adicionar itens dentro de uma página.'); return; }
+    
+    // Validação: verifica se já existe um item com o mesmo nome no mesmo nível
+    const targetArr = pendingAddNode === null ? tree : (pendingAddNode.c || []);
+    if (nameExistsInArray(name, targetArr)) {
+      alert(`Já existe um item com o nome "${name}" neste nível. Escolha outro nome.`);
+      return;
+    }
+    
+    const newItem = (selectedType === 'dir' || pendingAddNode === null) ? { l: name, c: [] } : { l: name };
+    if (pendingAddNode === null) {
+      tree.push(newItem);
+    } else {
+      if (!pendingAddNode.c) pendingAddNode.c = [];
+      pendingAddNode.c.push(newItem);
+    }
+    await saveTree();
+    closeModal('modalAdd');
+    rebuildNav(true);
+  } catch(e) {
+    alert('Erro: ' + (e.message || e));
   }
-  
-  const newItem = (selectedType === 'dir' || pendingAddNode === null) ? { l: name, c: [] } : { l: name };
-  if (pendingAddNode === null) {
-    tree.push(newItem);
-  } else {
-    if (!pendingAddNode.c) pendingAddNode.c = [];
-    pendingAddNode.c.push(newItem);
-  }
-  await saveTree();
-  closeModal('modalAdd');
-  rebuildNav(true);
 }
 
 function showDeleteModal(node, parentArr) {
@@ -1252,39 +1265,43 @@ function showDeleteModal(node, parentArr) {
 }
 
 async function confirmDelete() {
-  if (!pendingDelParentArr || !pendingDelNode) return;
-  const idx = pendingDelParentArr.indexOf(pendingDelNode);
-  if (idx !== -1) pendingDelParentArr.splice(idx, 1);
-  await saveTree();
-  closeModal('modalDel');
-  if (activeEl) {
-    const activeLabel = activeEl.querySelector('.lbl')?.textContent || '';
-    const wasDeleted = pendingDelNode.l === activeLabel ||
-      (function nodeContains(n, label) {
-        if (n.l === label) return true;
-        if (n.c) return n.c.some(ch => nodeContains(ch, label));
-        return false;
-      })(pendingDelNode, activeLabel);
-    if (wasDeleted) {
-      activeEl = null;
-      currentPageKey = null;
-  currentMenuItemId = null;
-      document.getElementById('breadcrumb').innerHTML = '<span>Home</span>';
-      const main = document.getElementById('mainContent');
-      main.classList.add('centered');
-      main.innerHTML = `<div class="placeholder" id="placeholder">
-        <svg viewBox="0 0 56 56" fill="none">
-          <rect x="10" y="8" width="36" height="40" rx="4" stroke="currentColor" stroke-width="1.5"/>
-          <line x1="17" y1="19" x2="39" y2="19" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-          <line x1="17" y1="26" x2="39" y2="26" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-          <line x1="17" y1="33" x2="30" y2="33" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-        </svg>
-        <p class="ph-title">Selecione um item</p>
-        <p>Navegue pelo menu lateral e clique em um item para visualizá-lo.</p>
-      </div>`;
+  try {
+    if (!pendingDelParentArr || !pendingDelNode) return;
+    const idx = pendingDelParentArr.indexOf(pendingDelNode);
+    if (idx !== -1) pendingDelParentArr.splice(idx, 1);
+    await saveTree();
+    closeModal('modalDel');
+    if (activeEl) {
+      const activeLabel = activeEl.querySelector('.lbl')?.textContent || '';
+      const wasDeleted = pendingDelNode.l === activeLabel ||
+        (function nodeContains(n, label) {
+          if (n.l === label) return true;
+          if (n.c) return n.c.some(ch => nodeContains(ch, label));
+          return false;
+        })(pendingDelNode, activeLabel);
+      if (wasDeleted) {
+        activeEl = null;
+        currentPageKey = null;
+        currentMenuItemId = null;
+        document.getElementById('breadcrumb').innerHTML = '<span>Home</span>';
+        const main = document.getElementById('mainContent');
+        main.classList.add('centered');
+        main.innerHTML = `<div class="placeholder" id="placeholder">
+          <svg viewBox="0 0 56 56" fill="none">
+            <rect x="10" y="8" width="36" height="40" rx="4" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="17" y1="19" x2="39" y2="19" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <line x1="17" y1="26" x2="39" y2="26" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <line x1="17" y1="33" x2="30" y2="33" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <p class="ph-title">Selecione um item</p>
+          <p>Navegue pelo menu lateral e clique em um item para visualizá-lo.</p>
+        </div>`;
+      }
     }
+    rebuildNav(true);
+  } catch(e) {
+    alert('Erro ao deletar: ' + (e.message || e));
   }
-  rebuildNav(true);
 }
 
 // ── ÍCONES ──
@@ -1674,9 +1691,13 @@ const DND = {
 
     target.parentArr.splice(Math.max(0, insertAt), 0, node);
 
-    await saveTree();
-    rebuildNav(true);
-    DND.showToast(`"${node.l}" movido com sucesso.`);
+    try {
+      await saveTree();
+      rebuildNav(true);
+      DND.showToast(`"${node.l}" movido com sucesso.`);
+    } catch(e) {
+      DND.showToast('Erro ao salvar: ' + (e.message || e), true);
+    }
 
     DND.dragging = null; DND.dropTarget = null;
   },
