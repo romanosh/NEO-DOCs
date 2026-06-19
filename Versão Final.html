@@ -835,6 +835,7 @@ async function doLogin() {
     errEl.textContent = '';
     document.getElementById('loginUser').value = '';
     document.getElementById('loginPass').value = '';
+    tree = await loadTree();
     rebuildNav(false);
   } catch(e) {
     errEl.textContent = 'Erro de conexão com o servidor.';
