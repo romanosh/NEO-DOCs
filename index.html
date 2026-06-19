@@ -1225,6 +1225,38 @@ function showDeleteModal(node, parentArr) {
 
 async function confirmDelete() {
   if (!pendingDelParentArr || !pendingDelNode) return;
+
+  // Build full path from root to this node
+  function pathToNode(nodes, target, path) {
+    for (const n of nodes) {
+      if (n === target) return [...path, n.l];
+      if (n.c) {
+        const found = pathToNode(n.c, target, [...path, n.l]);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  const basePath = pathToNode(tree, pendingDelNode, []);
+  // Collect all leaf paths under this node
+  const leafPaths = [];
+  (function collectLeaves(node, path) {
+    if (!node.c) { leafPaths.push(path); }
+    else { node.c.forEach(ch => collectLeaves(ch, [...path, ch.l])); }
+  })(pendingDelNode, basePath);
+
+  if (leafPaths.length > 0) {
+    const keys = leafPaths.map(p => pageKey(p));
+    const h = getAuthHeaders();
+    for (const key of keys) {
+      try {
+        await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key), {
+          method: 'DELETE', headers: { ...h, 'Prefer': 'return=minimal' }
+        });
+      } catch(e) {}
+    }
+  }
+
   const idx = pendingDelParentArr.indexOf(pendingDelNode);
   if (idx !== -1) pendingDelParentArr.splice(idx, 1);
   await saveTree();
