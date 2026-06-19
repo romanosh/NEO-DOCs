@@ -3,4 +3,7 @@ __pycache__/
 *.pyc
 .env
 neo_setup_dump.sql
+migrate_supabase.py
+*.sql
+test_debug.html
 -w
