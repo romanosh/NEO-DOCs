@@ -1031,10 +1031,10 @@ async function saveTree() {
         usedIds.push({ tempId: item.tempId, id: realId });
       }
     }
-    // Write back inserted IDs to tree nodes so new pages get menu_item_id
+    // Write back IDs to tree nodes (tanto novos quanto existentes)
     for (const item of flat) {
       const mapping = usedIds.find(x => x.tempId === item.tempId);
-      if (mapping && item.nodeRef && !item.nodeRef.id) {
+      if (mapping && item.nodeRef) {
         item.nodeRef.id = mapping.id;
       }
     }
