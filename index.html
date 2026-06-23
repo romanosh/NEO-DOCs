@@ -502,6 +502,7 @@
     <input type="text" id="loginUser" placeholder="Usuário ou email" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
     <input type="password" id="loginPass" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <div class="login-error" id="loginError"></div>
+    <div style="text-align:right;margin-bottom:10px"><a href="#" id="recoverLink" style="font-size:12px;color:#4A90D9;text-decoration:none;transition:color .15s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#4A90D9'">Recuperar Senha</a></div>
     <button class="login-btn" onclick="doLogin()">Entrar</button>
   </div>
 </div>
