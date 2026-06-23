@@ -831,6 +831,13 @@ function getCurrentUser() {
   } catch(e) { return null; }
 }
 
+function fadeEl(el, delay) {
+  setTimeout(() => {
+    el.style.opacity = '0';
+    setTimeout(() => { el.textContent = ''; el.style.color = ''; el.style.opacity = '1'; }, 800);
+  }, delay);
+}
+
 function setCurrentUser(token, user) {
   if (token && user) {
     localStorage.setItem(TOKEN_KEY, token);
@@ -3267,7 +3274,7 @@ async function saveProfileData() {
       headers: getAuthHeaders(),
       body: JSON.stringify(body)
     });
-    if (!r.ok) { const txt = await r.text().catch(()=>''); errEl.textContent = 'Erro ao salvar: ' + r.status + ' ' + txt.substring(0,80); return; }
+    if (!r.ok) { const txt = await r.text().catch(()=>''); errEl.textContent = 'Erro ao salvar: ' + r.status + ' ' + txt.substring(0,80); errEl.style.opacity = '1'; fadeEl(errEl, 8000); return; }
     if (body.nome) u.nome = nome;
     if (body.email) u.email = email;
     setCurrentUser(localStorage.getItem(TOKEN_KEY), u);
@@ -3275,12 +3282,11 @@ async function saveProfileData() {
     errEl.style.color = '#1a8a1a';
     errEl.textContent = 'Dados alterados com sucesso.';
     errEl.style.opacity = '1';
-    setTimeout(() => {
-      errEl.style.opacity = '0';
-      setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; errEl.style.opacity = '1'; }, 800);
-    }, 5000);
+    fadeEl(errEl, 5000);
   } catch (e) {
     errEl.textContent = 'Erro de conexão com o servidor.';
+    errEl.style.opacity = '1';
+    fadeEl(errEl, 8000);
   }
 }
 
@@ -3290,25 +3296,24 @@ async function changeProfilePassword() {
   const errEl = document.getElementById('profilePassError');
   errEl.textContent = '';
   const pw = document.getElementById('profilePassword').value;
-  if (!pw) { errEl.textContent = 'Digite a nova senha.'; return; }
-  if (pw.length < 8) { errEl.textContent = 'Mínimo 8 caracteres.'; return; }
+  if (!pw) { errEl.textContent = 'Digite a nova senha.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
+  if (pw.length < 8) { errEl.textContent = 'Mínimo 8 caracteres.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
   try {
     const r = await fetch(SUPABASE_URL + '/auth/v1/user', {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify({ password: pw })
     });
-    if (!r.ok) { errEl.textContent = 'Erro ao alterar senha'; return; }
+    if (!r.ok) { errEl.textContent = 'Erro ao alterar senha'; errEl.style.opacity = '1'; fadeEl(errEl, 8000); return; }
     document.getElementById('profilePassword').value = '';
     errEl.style.color = '#1a8a1a';
     errEl.textContent = 'Senha alterada com sucesso.';
     errEl.style.opacity = '1';
-    setTimeout(() => {
-      errEl.style.opacity = '0';
-      setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; errEl.style.opacity = '1'; }, 800);
-    }, 5000);
+    fadeEl(errEl, 5000);
   } catch (e) {
     errEl.textContent = 'Erro de conexão com o servidor.';
+    errEl.style.opacity = '1';
+    fadeEl(errEl, 8000);
   }
 }
 
