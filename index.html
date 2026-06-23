@@ -960,9 +960,6 @@ async function confirmLogout() {
 
 function showCreateUserModal() {
   if (!isAdmin()) return;
-  document.getElementById('newUserName').style.borderColor = '';
-  document.getElementById('newUserEmail').style.borderColor = '';
-  document.getElementById('createUserError').textContent = '';
   refreshUserList();
   openModal('modalUsers');
 }
@@ -1499,6 +1496,11 @@ function closeModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.remove('open');
+  if (id === 'modalUsers') {
+    document.getElementById('newUserName').value = ''; document.getElementById('newUserEmail').value = '';
+    document.getElementById('newUserName').style.borderColor = ''; document.getElementById('newUserEmail').style.borderColor = '';
+    document.getElementById('createUserError').textContent = '';
+  }
   if (id === 'modalAdd') {
     document.querySelector('#modalAdd .type-selector').style.display = 'flex';
     clearAddHighlight();
