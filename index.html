@@ -728,8 +728,8 @@
     <div style="border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
       <div style="font-weight:600;font-size:13px;margin-bottom:10px">Dados da conta</div>
       <div style="display:flex;flex-direction:column;gap:8px">
-        <input type="text" id="profileName" placeholder="Nome de usuário" style="height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 12px;font-size:13px;font-family:inherit;outline:none">
-        <input type="email" id="profileEmail" placeholder="Email" style="height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 12px;font-size:13px;font-family:inherit;outline:none">
+        <input type="text" id="profileName" placeholder="Usuário" style="height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 12px;font-size:13px;font-family:inherit;outline:none">
+        <input type="email" id="profileEmail" placeholder="E-mail" style="height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 12px;font-size:13px;font-family:inherit;outline:none">
       </div>
       <p id="profileDataError" style="font-size:12px;color:var(--danger);min-height:18px;margin:8px 0 0;transition:opacity .8s ease"></p>
       <button class="btn primary" onclick="saveProfileData()" style="margin-top:10px;width:100%">Salvar Dados</button>
@@ -3267,7 +3267,7 @@ async function saveProfileData() {
   const body = {};
   if (nome && nome !== u.nome) body.nome = nome;
   if (email && email !== u.email) body.email = email;
-  if (!body.nome && !body.email) { return; }
+  if (!body.nome && !body.email) { errEl.textContent = 'Nenhuma informação foi alterada.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
   try {
     const r = await fetch(SUPABASE_URL + '/rest/v1/profiles?id=eq.' + u.id, {
       method: 'PATCH',
