@@ -731,7 +731,7 @@
         <input type="text" id="profileName" placeholder="Nome de usuário" style="height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 12px;font-size:13px;font-family:inherit;outline:none">
         <input type="email" id="profileEmail" placeholder="Email" style="height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 12px;font-size:13px;font-family:inherit;outline:none">
       </div>
-      <p id="profileDataError" style="font-size:12px;color:var(--danger);min-height:18px;margin:8px 0 0"></p>
+      <p id="profileDataError" style="font-size:12px;color:var(--danger);min-height:18px;margin:8px 0 0;transition:opacity .8s ease"></p>
       <button class="btn primary" onclick="saveProfileData()" style="margin-top:10px;width:100%">Salvar Dados</button>
     </div>
 
@@ -742,7 +742,7 @@
         <input type="password" id="profileCurrentPassword" placeholder="Senha atual" style="height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 12px;font-size:13px;font-family:inherit;outline:none">
         <input type="password" id="profilePassword" placeholder="Nova senha (8+ chars, maiúscula, minúscula, número, @)" style="height:36px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 12px;font-size:13px;font-family:inherit;outline:none">
       </div>
-      <p id="profilePassError" style="font-size:12px;color:var(--danger);min-height:18px;margin:8px 0 0"></p>
+      <p id="profilePassError" style="font-size:12px;color:var(--danger);min-height:18px;margin:8px 0 0;transition:opacity .8s ease"></p>
       <button class="btn primary" onclick="changeProfilePassword()" style="margin-top:10px;width:100%">Alterar Senha</button>
     </div>
 
@@ -3235,7 +3235,11 @@ async function saveProfileData() {
     if (body.nome) document.getElementById('userAvatarLetters').textContent = nome.substring(0, 2).toUpperCase();
     errEl.style.color = '#1a8a1a';
     errEl.textContent = 'Dados alterados com sucesso.';
-    setTimeout(() => { if (errEl.textContent === 'Dados alterados com sucesso.') { errEl.textContent = ''; errEl.style.color = ''; } }, 5000);
+    errEl.style.opacity = '1';
+    setTimeout(() => {
+      errEl.style.opacity = '0';
+      setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; errEl.style.opacity = '1'; }, 800);
+    }, 5000);
   } catch (e) {
     errEl.textContent = 'Erro de conexão com o servidor.';
   }
@@ -3259,7 +3263,11 @@ async function changeProfilePassword() {
     document.getElementById('profilePassword').value = '';
     errEl.style.color = '#1a8a1a';
     errEl.textContent = 'Senha alterada com sucesso.';
-    setTimeout(() => { if (errEl.textContent === 'Senha alterada com sucesso.') { errEl.textContent = ''; errEl.style.color = ''; } }, 5000);
+    errEl.style.opacity = '1';
+    setTimeout(() => {
+      errEl.style.opacity = '0';
+      setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; errEl.style.opacity = '1'; }, 800);
+    }, 5000);
   } catch (e) {
     errEl.textContent = 'Erro de conexão com o servidor.';
   }
