@@ -58,6 +58,8 @@
   .arr { width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-right: 4px; transition: transform .18s; }
   .arr.open { transform: rotate(90deg); }
   .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--text-tertiary); flex-shrink: 0; }
+  .node-icon { width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-right: 4px; color: var(--text-tertiary); }
+  .nl.active .node-icon { color: var(--accent); }
   .children { display: none; }
   .children.open { display: block; }
 
@@ -201,6 +203,12 @@
   }
   body.dragging-active .ni > .nl { cursor: default; }
   body.dragging-active .ni.drop-invalid > .nl { cursor: no-drop; }
+  .ni.adding-parent > .nl {
+    background: var(--accent-bg);
+    outline: 2px solid var(--accent);
+    outline-offset: -1.5px;
+    border-radius: var(--radius);
+  }
 
   #dndToast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(12px);
@@ -969,10 +977,11 @@ function rowsToTree(rows) {
   const map = {};
   const roots = [];
   rows.forEach(r => {
-    if (r.is_page) {
-      map[r.id] = { id: r.id, l: r.name };
+    const type = r.type || (r.is_page ? 'document' : (r.parent_id ? 'directory' : 'class'));
+    if (type === 'document') {
+      map[r.id] = { id: r.id, l: r.name, type: 'document' };
     } else {
-      map[r.id] = { id: r.id, l: r.name, c: [] };
+      map[r.id] = { id: r.id, l: r.name, type, c: [] };
     }
   });
   rows.forEach(r => {
@@ -986,12 +995,17 @@ function rowsToTree(rows) {
   return roots;
 }
 
+function getNodeType(node) {
+  if (node.type) return node.type;
+  return Array.isArray(node.c) ? 'directory' : 'document';
+}
+
 function flattenTree(nodes, parentTempId) {
   const flat = [];
   nodes.forEach((node, i) => {
     const tempId = 't' + flat.length;
-    const isPage = !Array.isArray(node.c);
-    flat.push({ id: node.id || null, tempId, name: node.l, parentTempId, sortOrder: i, isPage, nodeRef: node });
+    const type = getNodeType(node);
+    flat.push({ id: node.id || null, tempId, name: node.l, parentTempId, sortOrder: i, type, nodeRef: node });
     if (node.c) { flat.push(...flattenTree(node.c, tempId)); }
   });
   return flat;
@@ -1020,13 +1034,13 @@ async function saveTree() {
           p_id: item.id, p_name: item.name,
           p_parent_id: realParentId,
           p_sort_order: item.sortOrder,
-          p_is_page: item.isPage
+          p_type: item.type
         });
         usedIds.push({ tempId: item.tempId, id: item.id });
       } else {
         const realId = await supabaseRpc('admin_insert_menu_item', {
           p_name: item.name, p_parent_id: realParentId,
-          p_sort_order: item.sortOrder, p_is_page: item.isPage
+          p_sort_order: item.sortOrder, p_type: item.type
         });
         usedIds.push({ tempId: item.tempId, id: realId });
       }
@@ -1051,8 +1065,15 @@ async function loadUsers() {
   } catch(e) { return []; }
 }
 
-async function loadPageContent(key) {
+async function loadPageContent(key, menuItemId) {
   try {
+    // Look up by menu_item_id first (robust against renames/deletes)
+    if (menuItemId) {
+      const r = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=content', { headers: getAuthHeaders() });
+      const data = await r.json();
+      if (data && data[0]) return data[0].content || '';
+    }
+    // Fallback: lookup by key (legacy)
     const r = await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key) + '&select=content', { headers: getAuthHeaders() });
     const data = await r.json();
     if (data && data[0]) return data[0].content || '';
@@ -1063,33 +1084,30 @@ async function loadPageContent(key) {
 async function savePageContent(key, html, menuItemId) {
   try {
     const h = getAuthHeaders();
-    // Look up existing page by menu_item_id first (robust against renames)
     if (menuItemId) {
+      // Look up existing page by menu_item_id (primary key)
       const existRes = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id', { headers: h });
       const existData = await existRes.json();
       if (existData && existData[0]) {
-        // Update existing page (also update key in case of rename)
         await fetch(SUPABASE_URL + '/rest/v1/page?id=eq.' + existData[0].id, {
           method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ key, content: html, menu_item_id: menuItemId })
+          body: JSON.stringify({ content: html, menu_item_id: menuItemId })
         });
         return;
       }
     }
-    // No existing page found, insert by key
-    const payload = { key, content: html };
+    // No existing page found, insert with menu_item_id
+    const payload = { content: html };
     if (menuItemId) payload.menu_item_id = menuItemId;
     const r = await fetch(SUPABASE_URL + '/rest/v1/page', {
       method: 'POST', headers: { ...h, 'Prefer': 'return=minimal' },
       body: JSON.stringify(payload)
     });
-    if (r.status === 409) {
-      // Exists by key, update
-      const patchPayload = { content: html };
-      if (menuItemId) patchPayload.menu_item_id = menuItemId;
+    if (r.status === 409 && key) {
+      // Fallback: exists by legacy key, update
       await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key), {
         method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
-        body: JSON.stringify(patchPayload)
+        body: JSON.stringify({ content: html, menu_item_id: menuItemId })
       });
     }
   } catch(e) {
@@ -1131,17 +1149,19 @@ function nameExistsInArray(name, arr, excludeNode = null) {
 
 // ── MODAIS ──
 function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('open');
+  if (id === 'modalAdd') {
+    document.querySelector('#modalAdd .type-selector').style.display = 'flex';
+    clearAddHighlight();
+  }
+}
 
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', e => { 
-    if (e.target === el) {
-      el.classList.remove('open');
-      // Restaura o seletor de tipo ao fechar o modal
-      if (el.id === 'modalAdd') {
-        document.querySelector('#modalAdd .type-selector').style.display = 'flex';
-      }
-    }
+    if (e.target === el) closeModal(el.id);
   });
 });
 document.getElementById('modalInput').addEventListener('keydown', e => {
@@ -1213,12 +1233,46 @@ function selectType(type) {
   document.getElementById('typePage').classList.toggle('selected', type === 'page');
 }
 
+let _addHighlightEl = null;
+
+function clearAddHighlight() {
+  if (_addHighlightEl) {
+    _addHighlightEl.classList.remove('adding-parent');
+    _addHighlightEl = null;
+  }
+}
+
+let pendingAddParentId = null;
+
+function findNodeById(nodes, id) {
+  if (!nodes) return null;
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    if (node.c) {
+      const found = findNodeById(node.c, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 function showAddModal(node, forceDir = false) {
   if (!isAdmin()) { alert('Apenas administradores podem adicionar itens.'); return; }
   if (node && !Array.isArray(node.c)) { alert('Não é possível adicionar itens dentro de uma página.'); return; }
+  
+  clearAddHighlight();
   pendingAddNode = node;
+  pendingAddParentId = node ? node.id : null;
   document.getElementById('modalParentName').textContent = node ? node.l : 'Raiz';
   document.getElementById('modalInput').value = '';
+  
+  if (node && node.id) {
+    const parentEl = document.querySelector(`#nav .ni[data-id="${node.id}"]`);
+    if (parentEl) {
+      parentEl.classList.add('adding-parent');
+      _addHighlightEl = parentEl;
+    }
+  }
   
   const typeSelector = document.querySelector('#modalAdd .type-selector');
   if (forceDir) {
@@ -1241,21 +1295,33 @@ async function confirmAdd() {
   try {
     const name = document.getElementById('modalInput').value.trim();
     if (!name) return;
-    if (pendingAddNode && !Array.isArray(pendingAddNode.c)) { alert('Não é possível adicionar itens dentro de uma página.'); return; }
+    
+    // Resolve o nó pai: busca por ID na árvore atual para evitar referências obsoletas
+    let parentNode = null;
+    if (pendingAddParentId !== null) {
+      parentNode = findNodeById(tree, pendingAddParentId);
+    }
+    if (!parentNode && pendingAddNode) {
+      if (!Array.isArray(pendingAddNode.c)) { alert('Não é possível adicionar itens dentro de uma página.'); return; }
+      parentNode = pendingAddNode;
+    }
     
     // Validação: verifica se já existe um item com o mesmo nome no mesmo nível
-    const targetArr = pendingAddNode === null ? tree : (pendingAddNode.c || []);
+    const targetArr = parentNode === null ? tree : (parentNode.c || []);
     if (nameExistsInArray(name, targetArr)) {
       alert(`Já existe um item com o nome "${name}" neste nível. Escolha outro nome.`);
       return;
     }
     
-    const newItem = (selectedType === 'dir' || pendingAddNode === null) ? { l: name, c: [] } : { l: name };
-    if (pendingAddNode === null) {
+    const isDir = selectedType === 'dir' || parentNode === null;
+    const newItem = isDir
+      ? { l: name, c: [], type: parentNode === null ? 'class' : 'directory' }
+      : { l: name, type: 'document' };
+    if (parentNode === null) {
       tree.push(newItem);
     } else {
-      if (!pendingAddNode.c) pendingAddNode.c = [];
-      pendingAddNode.c.push(newItem);
+      if (!parentNode.c) parentNode.c = [];
+      parentNode.c.push(newItem);
     }
     await saveTree();
     closeModal('modalAdd');
@@ -1333,6 +1399,7 @@ const icoAdd  = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><pa
 const icoEdit = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 9.5L3.5 10l5.5-5.5-1.5-1.5L2 8.5v1z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="M7.5 3l1.5 1.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>`;
 const icoDel  = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 3.5h8M4.5 3.5V2.5h3v1M4 3.5l.4 6h3.2l.4-6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const icoGrip = `<svg width="9" height="14" viewBox="0 0 9 14" fill="none"><circle cx="2.5" cy="2.5" r="1.2" fill="currentColor"/><circle cx="6.5" cy="2.5" r="1.2" fill="currentColor"/><circle cx="2.5" cy="7" r="1.2" fill="currentColor"/><circle cx="6.5" cy="7" r="1.2" fill="currentColor"/><circle cx="2.5" cy="11.5" r="1.2" fill="currentColor"/><circle cx="6.5" cy="11.5" r="1.2" fill="currentColor"/></svg>`;
+const icoDoc  = `<svg width="12" height="14" viewBox="0 0 12 14" fill="none"><path d="M2 1.5A1.5 1.5 0 013.5 0h5l3 3v9.5A1.5 1.5 0 0110 14H3.5A1.5 1.5 0 012 12.5v-11z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M8.5 0v3h3" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><line x1="4" y1="6" x2="8" y2="6" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><line x1="4" y1="8.5" x2="8" y2="8.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><line x1="4" y1="11" x2="6.5" y2="11" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>`;
 
 // ── RENDER DA ÁRVORE ──
 function render(nodes, depth, parent, pathSoFar, parentArr) {
@@ -1340,8 +1407,9 @@ function render(nodes, depth, parent, pathSoFar, parentArr) {
   nodes.forEach(node => {
     const hasChildren = Array.isArray(node.c);
     const wrap = document.createElement('div');
-    wrap.className = `ni d${depth}`;
+    wrap.className = `ni d${depth} type-${node.type || (hasChildren ? 'directory' : 'document')}`;
     wrap.dataset.label = node.l.toLowerCase();
+    if (node.id) wrap.dataset.id = node.id;
 
     const row = document.createElement('div');
     row.className = 'nl';
@@ -1430,13 +1498,14 @@ function render(nodes, depth, parent, pathSoFar, parentArr) {
       });
 
     } else {
-      const dot = document.createElement('div');
-      dot.className = 'dot';
+      const docIcon = document.createElement('div');
+      docIcon.className = 'node-icon doc-icon';
+      docIcon.innerHTML = icoDoc;
       const lbl = document.createElement('span');
       lbl.className = 'lbl';
       lbl.textContent = node.l;
 
-      row.appendChild(dot);
+      row.appendChild(docIcon);
       row.appendChild(lbl);
       if (actions) row.appendChild(actions);
       if (handle) row.appendChild(handle);
@@ -1864,8 +1933,8 @@ async function openPageEditor(node, fullPath) {
     }
   });
 
-  // Load saved content or default
-  const saved = await loadPageContent(key);
+  // Load saved content or default (priority: menu_item_id lookup)
+  const saved = await loadPageContent(key, node.id);
   if (saved) {
     body.innerHTML = saved;
     // Migra tabelas: contentEditable na tabela (não nas células) para permitir seleção entre células
