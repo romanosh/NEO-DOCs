@@ -964,8 +964,11 @@ function showCreateUserModal() {
   openModal('modalUsers');
 }
 
+let _userList = [];
+
 async function refreshUserList() {
   const users = await loadUsers();
+  _userList = users;
   const list = document.getElementById('userList');
   const currentUser = getCurrentUser();
   list.innerHTML = users.map(u => {
@@ -1038,6 +1041,11 @@ async function addUserFromModal() {
   if (!nome && !email) { nomeEl.style.borderColor = 'var(--danger)'; emailEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Preencha o nome e o email.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
   if (!nome) { nomeEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Preencha o nome.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
   if (!email) { emailEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Preencha o email.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
+  const dupNome = _userList.find(u => u.nome.toLowerCase() === nome.toLowerCase());
+  const dupEmail = _userList.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (dupNome && dupEmail) { nomeEl.style.borderColor = 'var(--danger)'; emailEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Usuário e email já existem.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
+  if (dupNome) { nomeEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Usuário "' + nome + '" já existe.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
+  if (dupEmail) { emailEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Email "' + email + '" já cadastrado.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
   try {
     const r = await fetch(SUPABASE_URL + '/auth/v1/admin/users', {
       method: 'POST',
