@@ -500,7 +500,7 @@
     </div>
     <h2>Padrões de Setup</h2>
     <p class="login-sub">Controle de Documentação</p>
-    <input type="email" id="loginUser" placeholder="Email" autocomplete="email" onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
+    <input type="text" id="loginUser" placeholder="Usuário ou email" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
     <input type="password" id="loginPass" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <div class="login-error" id="loginError"></div>
     <button class="login-btn" onclick="doLogin()">Entrar</button>
@@ -815,11 +815,19 @@ function isAdmin() {
 }
 
 async function doLogin() {
-  const email = document.getElementById('loginUser').value.trim();
+  let input = document.getElementById('loginUser').value.trim();
   const password = document.getElementById('loginPass').value;
   const errEl = document.getElementById('loginError');
-  if (!email || !password) { errEl.textContent = 'Preencha email e senha.'; return; }
+  if (!input || !password) { errEl.textContent = 'Preencha usuário e senha.'; return; }
   try {
+    // Se não parece email, resolve pelo nome de usuário
+    if (!input.includes('@')) {
+      try {
+        const resolved = await supabaseRpc('get_email_by_nome', { p_nome: input });
+        if (resolved) input = resolved;
+      } catch(e) {}
+    }
+    const email = input;
     const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
       method: 'POST',
       headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
