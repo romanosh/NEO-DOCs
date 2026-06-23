@@ -1064,9 +1064,9 @@ async function addUserFromModal() {
     }
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserEmail').value = '';
-    nomeEl.style.borderColor = ''; emailEl.style.borderColor = ''; errEl.textContent = '';
-    refreshUserList();
+    nomeEl.style.borderColor = ''; emailEl.style.borderColor = '';
     errEl.style.color = '#1a8a1a'; errEl.textContent = 'Usuário criado com sucesso.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000);
+    refreshUserList();
   } catch(e) { errEl.textContent = 'Erro ao criar perfil no banco.'; errEl.style.opacity = '1'; fadeEl(errEl, 8000); }
 }
 
