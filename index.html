@@ -767,6 +767,18 @@
   </div>
 </div>
 
+<!-- MODAL: Excluir usuário -->
+<div class="modal-overlay" id="modalDelUser">
+  <div class="modal" style="width:360px">
+    <h3 style="color:var(--danger)">Excluir usuário</h3>
+    <p id="delUserMsg" style="font-size:13px"></p>
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="btn" onclick="closeModal('modalDelUser')">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmDelUser()">Excluir</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Resetar senha -->
 <div class="modal-overlay" id="modalResetPass">
   <div class="modal" style="width:360px">
@@ -1010,10 +1022,18 @@ async function updateUserRole(uid, role) {
   } catch(e) { alert(e.message || 'Erro de conexão'); }
 }
 
-async function deleteUser(uid) {
-  if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
+let _delUid = null;
+
+function deleteUser(uid) {
+  _delUid = uid;
+  document.getElementById('delUserMsg').textContent = 'Tem certeza que deseja excluir este usuário?';
+  openModal('modalDelUser');
+}
+
+async function confirmDelUser() {
+  closeModal('modalDelUser');
   try {
-    await supabaseRpc('admin_delete_user', { target_user_id: uid });
+    await supabaseRpc('admin_delete_user', { target_user_id: _delUid });
     refreshUserList();
   } catch(e) { alert(e.message || 'Erro de conexão'); }
 }
