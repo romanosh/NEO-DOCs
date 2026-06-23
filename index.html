@@ -710,7 +710,8 @@
           <input type="text" id="newUserName" placeholder="Nome" style="flex:1;height:34px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;outline:none">
           <input type="email" id="newUserEmail" placeholder="Email" style="flex:1;height:34px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 10px;font-size:12px;font-family:inherit;outline:none">
         </div>
-        <button class="btn primary" onclick="addUserFromModal()" style="height:34px">+ Criar (senha: Estech@1904)</button>
+        <p id="createUserError" style="font-size:12px;color:var(--danger);min-height:18px;margin:4px 0 0;transition:opacity .8s ease"></p>
+        <button class="btn primary" onclick="addUserFromModal()" style="height:34px;margin-top:6px">+ Criar (senha: Estech@1904)</button>
       </div>
     <div id="userList" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px"></div>
     <div class="modal-actions">
@@ -959,6 +960,9 @@ async function confirmLogout() {
 
 function showCreateUserModal() {
   if (!isAdmin()) return;
+  document.getElementById('newUserName').style.borderColor = '';
+  document.getElementById('newUserEmail').style.borderColor = '';
+  document.getElementById('createUserError').textContent = '';
   refreshUserList();
   openModal('modalUsers');
 }
@@ -1028,9 +1032,15 @@ async function confirmResetPass() {
 }
 
 async function addUserFromModal() {
-  const nome = document.getElementById('newUserName').value.trim();
-  const email = document.getElementById('newUserEmail').value.trim();
-  if (!nome || !email) { alert('Preencha nome e email.'); return; }
+  const nomeEl = document.getElementById('newUserName');
+  const emailEl = document.getElementById('newUserEmail');
+  const nome = nomeEl.value.trim();
+  const email = emailEl.value.trim();
+  const errEl = document.getElementById('createUserError');
+  nomeEl.style.borderColor = ''; emailEl.style.borderColor = ''; errEl.textContent = ''; errEl.style.opacity = '0';
+  if (!nome && !email) { nomeEl.style.borderColor = 'var(--danger)'; emailEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Preencha o nome e o email.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
+  if (!nome) { nomeEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Preencha o nome.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
+  if (!email) { emailEl.style.borderColor = 'var(--danger)'; errEl.textContent = 'Preencha o email.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
   try {
     const r = await fetch(SUPABASE_URL + '/auth/v1/admin/users', {
       method: 'POST',
@@ -1042,6 +1052,7 @@ async function addUserFromModal() {
     await supabaseRpc('admin_insert_profile', { p_nome: nome, p_email: email });
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserEmail').value = '';
+    nomeEl.style.borderColor = ''; emailEl.style.borderColor = ''; errEl.textContent = '';
     refreshUserList();
     alert('Usuário "' + nome + '" criado com senha: Estech@1904');
   } catch(e) { alert('Erro de conexão'); }
