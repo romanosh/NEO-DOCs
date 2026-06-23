@@ -1067,55 +1067,314 @@ async function loadUsers() {
   } catch(e) { return []; }
 }
 
-async function loadPageContent(key, menuItemId) {
-  try {
-    // Look up by menu_item_id first (robust against renames/deletes)
-    if (menuItemId) {
-      const r = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=content', { headers: getAuthHeaders() });
-      const data = await r.json();
-      if (data && data[0]) return data[0].content || '';
-    }
-    // Fallback: lookup by key (legacy)
-    const r = await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key) + '&select=content', { headers: getAuthHeaders() });
-    const data = await r.json();
-    if (data && data[0]) return data[0].content || '';
-  } catch(e) {}
-  return '';
+// ── DATA-DRIVEN PAGE LAYER ──
+// Armazena apenas dados do usuário (nunca HTML) — versão 1 do schema
+const PAGE_DATA_VERSION = 1;
+let _secIdCounter = 0;
+
+function pageDataEmpty() {
+  return { version: PAGE_DATA_VERSION, sections: [] };
 }
 
-async function savePageContent(key, html, menuItemId) {
+function secId() {
+  return 'sec_' + (_secIdCounter++);
+}
+
+// ── RENDER: JSON → DOM ──
+function pageDataRender(data) {
+  const body = document.createElement('div');
+  body.className = 'page-body';
+  body.id = 'peBody';
+  if (!data || !data.sections) return body;
+  data.sections.forEach((sec, idx) => {
+    const el = sectionRender(sec, idx);
+    if (el) body.appendChild(el);
+  });
+  return body;
+}
+
+function sectionRender(sec, idx) {
+  if (!sec || !sec.type) return null;
+  const div = document.createElement('div');
+  div.className = 'pe-section';
+  div.dataset.secId = sec.id || secId();
+  div.dataset.secType = sec.type;
+
+  const ctrl = document.createElement('div');
+  ctrl.className = 'pe-section-controls';
+  ctrl.innerHTML = `<div class="sec-drag-handle" title="Arrastar para reposicionar">${icoGrip}</div>
+    <button onclick="peDeleteSection(this)" style="margin-left:auto">Excluir seção</button>`;
+  div.appendChild(ctrl);
+
+  const inner = document.createElement('div');
+  inner.className = 'pe-section-inner';
+  div.appendChild(inner);
+
+  switch (sec.type) {
+    case 'text':
+      renderSectionText(inner, sec);
+      break;
+    case 'table':
+      renderSectionTable(inner, sec);
+      break;
+    case 'image':
+      renderSectionImage(inner, sec);
+      break;
+    default:
+      // Componente futuro desconhecido — exibe placeholder
+      inner.innerHTML = `<div style="padding:16px;color:#999;border:1px dashed #ddd;border-radius:4px;text-align:center">
+        Componente "${sec.type}" não reconhecido</div>`;
+  }
+  addSecDrag(div);
+  return div;
+}
+
+function renderSectionText(inner, sec) {
+  let html = '';
+  if (sec.title) {
+    html += `<h2 contenteditable="true" data-field="title">${escapeHtml(sec.title)}</h2>`;
+  }
+  if (sec.paragraphs && sec.paragraphs.length > 0) {
+    sec.paragraphs.forEach(p => {
+      html += `<p contenteditable="true" data-field="p">${escapeHtml(p)}</p>`;
+    });
+  } else {
+    html += `<p contenteditable="true" data-field="p"><br></p>`;
+  }
+  inner.innerHTML = html;
+}
+
+function renderSectionTable(inner, sec) {
+  let html = '';
+  if (sec.title) {
+    html += `<h2 contenteditable="true" data-field="title">${escapeHtml(sec.title)}</h2>`;
+  }
+  html += `<div class="table-scroll"><table contenteditable="true"><thead><tr>`;
+  const headers = sec.headers || [''];
+  headers.forEach(h => {
+    const v = (h || '').trim();
+    html += `<th>${v ? escapeHtml(v) : '<br>'}</th>`;
+  });
+  html += `</tr></thead><tbody>`;
+  const rows = sec.rows || [['']];
+  rows.forEach(row => {
+    html += `<tr>`;
+    for (let i = 0; i < Math.max(row.length, 1); i++) {
+      const v = (row[i] || '').trim();
+      html += `<td>${v ? escapeHtml(v) : '<br>'}</td>`;
+    }
+    html += `</tr>`;
+  });
+  html += `</tbody></table></div>`;
+  inner.innerHTML = html;
+  const tbl = inner.querySelector('table');
+  if (tbl) {
+    tbl.querySelectorAll('tr').forEach(r => autoFitRowHeight(r));
+  }
+}
+
+function renderSectionImage(inner, sec) {
+  let html = '';
+  if (sec.title) {
+    html += `<h2 contenteditable="true" data-field="title">${escapeHtml(sec.title)}</h2>`;
+  }
+  html += `<div class="pe-img-container">
+    <img src="${escapeHtml(sec.src || '')}" alt="Imagem">
+    <p class="pe-img-caption" contenteditable="true" data-field="caption">${escapeHtml(sec.caption || 'Clique para adicionar legenda...')}</p>
+  </div>`;
+  inner.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  if (typeof s !== 'string') return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── EXTRACT: DOM → JSON ──
+function pageDataExtract(bodyEl) {
+  const sections = [];
+  const secEls = bodyEl ? bodyEl.querySelectorAll(':scope > .pe-section') : [];
+  secEls.forEach(secEl => {
+    const type = secEl.dataset.secType || 'text';
+    const inner = secEl.querySelector('.pe-section-inner');
+    if (!inner) return;
+    let data = { id: secEl.dataset.secId, type };
+    switch (type) {
+      case 'text':
+        data = extractSectionText(inner, data);
+        break;
+      case 'table':
+        data = extractSectionTable(inner, data);
+        break;
+      case 'image':
+        data = extractSectionImage(inner, data);
+        break;
+    }
+    sections.push(data);
+  });
+  return { version: PAGE_DATA_VERSION, sections };
+}
+
+function extractSectionText(inner, data) {
+  const h2 = inner.querySelector(':scope > h2');
+  if (h2) data.title = h2.innerText.trim();
+  const ps = inner.querySelectorAll(':scope > p');
+  if (ps.length > 0) {
+    data.paragraphs = Array.from(ps).map(p => p.innerText.trim());
+  }
+  return data;
+}
+
+function extractSectionTable(inner, data) {
+  const h2 = inner.querySelector(':scope > h2');
+  if (h2) data.title = h2.innerText.trim();
+  const table = inner.querySelector('table');
+  if (table) {
+    const thead = table.querySelector('thead');
+    const tbody = table.querySelector('tbody');
+    if (thead && thead.rows[0]) {
+      data.headers = Array.from(thead.rows[0].cells).map(c => c.innerText.trim());
+    }
+    if (tbody) {
+      data.rows = Array.from(tbody.rows).map(row =>
+        Array.from(row.cells).map(c => c.innerText.trim())
+      );
+    }
+  }
+  return data;
+}
+
+function extractSectionImage(inner, data) {
+  const h2 = inner.querySelector(':scope > h2');
+  if (h2) data.title = h2.innerText.trim();
+  const img = inner.querySelector('img');
+  if (img) data.src = img.getAttribute('src') || '';
+  const cap = inner.querySelector('.pe-img-caption');
+  if (cap) data.caption = cap.innerText.trim();
+  return data;
+}
+
+// ── MIGRAÇÃO: HTML legado → JSON ──
+function migrateHtmlToData(html) {
+  const data = pageDataEmpty();
+  if (!html || !html.trim()) return data;
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+  const secEls = temp.querySelectorAll(':scope > .pe-section');
+  if (secEls.length === 0) {
+    // HTML solto (sem seções) — trata como texto único
+    const text = temp.innerText.trim();
+    if (text) {
+      data.sections.push({ id: secId(), type: 'text', title: '', paragraphs: [text] });
+    }
+    return data;
+  }
+  secEls.forEach(secEl => {
+    const type = secEl.dataset.secType;
+    const h2 = secEl.querySelector('h2');
+    if (secEl.querySelector('img')) {
+      const img = secEl.querySelector('img');
+      const cap = secEl.querySelector('.pe-img-caption');
+      data.sections.push({
+        id: secId(), type: 'image',
+        title: h2 ? h2.innerText.trim() : 'Imagem',
+        src: img ? img.getAttribute('src') || '' : '',
+        caption: cap ? cap.innerText.trim() : ''
+      });
+    } else if (secEl.querySelector('table') || type === 'table') {
+      const table = secEl.querySelector('table');
+      const thead = table ? table.querySelector('thead') : null;
+      const tbody = table ? table.querySelector('tbody') : null;
+      data.sections.push({
+        id: secId(), type: 'table',
+        title: h2 ? h2.innerText.trim() : 'Tabela',
+        headers: thead && thead.rows[0]
+          ? Array.from(thead.rows[0].cells).map(c => c.innerText.trim())
+          : [''],
+        rows: tbody
+          ? Array.from(tbody.rows).map(row => Array.from(row.cells).map(c => c.innerText.trim()))
+          : [['']]
+      });
+    } else {
+      const ps = secEl.querySelectorAll('p');
+      data.sections.push({
+        id: secId(), type: 'text',
+        title: h2 ? h2.innerText.trim() : '',
+        paragraphs: ps.length > 0
+          ? Array.from(ps).map(p => p.innerText.trim())
+          : [secEl.innerText.trim()]
+      });
+    }
+  });
+  return data;
+}
+
+// ── PERSISTÊNCIA (Supabase) — salva/carrega data_json ──
+async function loadPageContent(key, menuItemId) {
+  try {
+    let row = null;
+    if (menuItemId) {
+      const r = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id,template_type,data_json,content', { headers: getAuthHeaders() });
+      const data = await r.json();
+      if (data && data[0]) row = data[0];
+    }
+    if (!row) {
+      const r = await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key) + '&select=id,template_type,data_json,content', { headers: getAuthHeaders() });
+      const data = await r.json();
+      if (data && data[0]) row = data[0];
+    }
+    if (row) {
+      if (row.data_json && typeof row.data_json === 'object' && row.data_json.version) {
+        return upgradePageData(row.data_json);
+      }
+      if (row.content) {
+        const migrated = migrateHtmlToData(row.content);
+        savePageContent(key, migrated, menuItemId);
+        return migrated;
+      }
+    }
+  } catch(e) { console.error('loadPageContent error:', e); }
+  return pageDataEmpty();
+}
+
+async function savePageContent(key, data, menuItemId) {
+  if (!data || !data.version) data = data ? { version: PAGE_DATA_VERSION, sections: data.sections || [] } : pageDataEmpty();
   try {
     const h = getAuthHeaders();
+    const payload = { data_json: data, template_type: 'blank' };
+    if (menuItemId) payload.menu_item_id = menuItemId;
+    if (key) payload.key = key;
     if (menuItemId) {
-      // Look up existing page by menu_item_id (primary key)
       const existRes = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id', { headers: h });
       const existData = await existRes.json();
       if (existData && existData[0]) {
         await fetch(SUPABASE_URL + '/rest/v1/page?id=eq.' + existData[0].id, {
           method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ content: html, menu_item_id: menuItemId })
+          body: JSON.stringify(payload)
         });
         return;
       }
     }
-    // No existing page found, insert with menu_item_id and key
-    const payload = { content: html };
-    if (menuItemId) payload.menu_item_id = menuItemId;
-    if (key) payload.key = key;
     const r = await fetch(SUPABASE_URL + '/rest/v1/page', {
       method: 'POST', headers: { ...h, 'Prefer': 'return=minimal' },
       body: JSON.stringify(payload)
     });
     if (r.status === 409 && key) {
-      // Fallback: exists by legacy key, update
       await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key), {
         method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
-        body: JSON.stringify({ content: html, menu_item_id: menuItemId })
+        body: JSON.stringify(payload)
       });
     }
   } catch(e) {
     console.error('Save failed:', e);
   }
+}
+
+function upgradePageData(data) {
+  if (data.version === 1) return data;
+  // Versões futuras: aplicar migrações aqui
+  if (!data.version) data.version = PAGE_DATA_VERSION;
+  return data;
 }
 
 // ── ESTADO ──
@@ -1892,10 +2151,24 @@ async function openPageEditor(node, fullPath) {
           <input type="text" placeholder="Buscar nesta página..." oninput="filterPageContent(this.value)">
         </div>`;
 
-  // Body
-  const body = document.createElement('div');
-  body.className = 'page-body';
+  // Load saved data and render
+  const pageData = await loadPageContent(key, node.id);
+  const body = pageDataRender(pageData);
   body.id = 'peBody';
+
+  // Configura tabelas renderizadas: contentEditable na tabela, resize, search
+  body.querySelectorAll('table').forEach(tbl => {
+    tbl.contentEditable = true;
+    tbl.querySelectorAll('td, th').forEach(cell => cell.removeAttribute('contenteditable'));
+    if (!tbl.closest('.table-scroll')) {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-scroll';
+      tbl.parentNode.insertBefore(wrap, tbl);
+      wrap.appendChild(tbl);
+    }
+  });
+  initTableResize();
+  initTableSearch();
 
   // Footer
   const footer = document.createElement('div');
@@ -1908,6 +2181,8 @@ async function openPageEditor(node, fullPath) {
   editor.appendChild(body);
   editor.appendChild(footer);
   main.appendChild(editor);
+
+  peUpdateTime();
 
   // Start observing for table resize handles
   if (typeof _resizeObs !== 'undefined') _resizeObs.observe(body, { childList: true, subtree: true });
@@ -1936,97 +2211,13 @@ async function openPageEditor(node, fullPath) {
     }
   });
 
-  // Load saved content or default (priority: menu_item_id lookup)
-  const saved = await loadPageContent(key, node.id);
-  if (saved) {
-    body.innerHTML = saved;
-    // Migra tabelas: contentEditable na tabela (não nas células) para permitir seleção entre células
-    body.querySelectorAll('table').forEach(tbl => {
-      tbl.contentEditable = true;
-      tbl.querySelectorAll('td, th').forEach(cell => cell.removeAttribute('contenteditable'));
-      // Envolve em .table-scroll se ainda não estiver
-      if (!tbl.closest('.table-scroll')) {
-        const wrap = document.createElement('div');
-        wrap.className = 'table-scroll';
-        tbl.parentNode.insertBefore(wrap, tbl);
-        wrap.appendChild(tbl);
-      }
-    });
-    initTableResize();
-    initTableSearch();
-    // Remove botões antigos das seções existentes, substituindo controles
-    body.querySelectorAll('.pe-section').forEach(section => {
-      let controls = section.querySelector('.pe-section-controls');
-      if (!controls) {
-        controls = document.createElement('div');
-        controls.className = 'pe-section-controls';
-        section.insertBefore(controls, section.firstChild);
-      }
-      // Remove apenas botões que não sejam o "Excluir seção"
-      controls.querySelectorAll('button').forEach(btn => {
-        if (!btn.textContent.includes('Excluir')) btn.remove();
-      });
-      // Adiciona drag handle se não existir
-      if (!controls.querySelector('.sec-drag-handle')) {
-        const handle = document.createElement('div');
-        handle.className = 'sec-drag-handle';
-        handle.title = 'Arrastar para reposicionar';
-        handle.innerHTML = icoGrip;
-        controls.insertBefore(handle, controls.firstChild);
-      }
-      // Garante que o Excluir fique à direita
-      let delBtn = controls.querySelector('button');
-      if (delBtn) {
-        delBtn.style.marginLeft = 'auto';
-      } else {
-        delBtn = document.createElement('button');
-        delBtn.onclick = function() { peDeleteSection(this); };
-        delBtn.style.marginLeft = 'auto';
-        delBtn.textContent = 'Excluir seção';
-        controls.appendChild(delBtn);
-      }
-      addSecDrag(section);
-    });
-  } else {
-    // Página inicia vazia — sem seção padrão
-  }
-
-  peUpdateTime();
-  
   if (!admin) {
-    // Para visualizadores: conteúdo apenas leitura, esconde botões Excluir
     body.querySelectorAll('[contenteditable]').forEach(el => el.contentEditable = 'false');
     body.querySelectorAll('.pe-section-controls button').forEach(btn => btn.style.display = 'none');
     body.querySelectorAll('.sec-drag-handle').forEach(h => h.style.display = 'none');
   } else {
-    // Garante que todos os controles de seção tenham o botão "Excluir seção"
-    body.querySelectorAll('.pe-section').forEach(section => {
-      let ctrl = section.querySelector('.pe-section-controls');
-      if (!ctrl) {
-        ctrl = document.createElement('div');
-        ctrl.className = 'pe-section-controls';
-        section.insertBefore(ctrl, section.firstChild);
-      }
-      let btn = ctrl.querySelector('button');
-      if (!btn) {
-        btn = document.createElement('button');
-        btn.textContent = 'Excluir seção';
-        btn.onclick = function() { peDeleteSection(this); };
-        ctrl.appendChild(btn);
-      }
-      btn.style.display = '';
-      btn.style.marginLeft = 'auto';
-      if (!ctrl.querySelector('.sec-drag-handle')) {
-        const h = document.createElement('div');
-        h.className = 'sec-drag-handle';
-        h.title = 'Arrastar para reposicionar';
-        h.innerHTML = icoGrip;
-        ctrl.insertBefore(h, ctrl.firstChild);
-      }
-    });
     // Auto-save on any input
     body.addEventListener('input', () => peAutoSave());
-    // Enter em títulos e células de tabela confirma em vez de quebrar linha
     body.addEventListener('keydown', (e) => {
       if ((e.target.tagName === 'H2' || e.target.tagName === 'TD' || e.target.tagName === 'TH') && e.key === 'Enter') {
         e.preventDefault();
@@ -2040,7 +2231,8 @@ function peAutoSave() {
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(async () => {
     if (!currentPageKey) return;
-    await savePageContent(currentPageKey, document.getElementById('peBody').innerHTML, currentMenuItemId);
+    const data = pageDataExtract(document.getElementById('peBody'));
+    await savePageContent(currentPageKey, data, currentMenuItemId);
     peUpdateTime();
   }, 600);
 }
@@ -2073,24 +2265,16 @@ function filterPageContent(query) {
 function peAddText() {
   const body = document.getElementById('peBody');
   if (!body) return;
-  peAddSection(body, `<h2 contenteditable="true">Nova Seção</h2><p contenteditable="true">Novo parágrafo...</p>`);
+  const sec = { id: secId(), type: 'text', title: 'Nova Seção', paragraphs: ['Novo parágrafo...'] };
+  body.appendChild(sectionRender(sec));
   peAutoSave();
 }
 
 function peAddTable() {
   const body = document.getElementById('peBody');
   if (!body) return;
-  const html = `<h2 contenteditable="true">Tabela</h2>
-    <div class="table-scroll"><table contenteditable="true"><thead><tr>
-      <th><br></th>
-      <th><br></th>
-      <th><br></th>
-    </tr></thead><tbody><tr>
-      <td><br></td>
-      <td><br></td>
-      <td><br></td>
-    </tr></tbody></table></div>`;
-  peAddSection(body, html);
+  const sec = { id: secId(), type: 'table', title: 'Tabela', headers: ['', '', ''], rows: [['', '', '']] };
+  body.appendChild(sectionRender(sec));
   const tbl = body.querySelector('table:last-of-type');
   if (tbl) {
     tbl.querySelectorAll('tr').forEach(r => autoFitRowHeight(r));
@@ -2111,12 +2295,8 @@ function peAddImage() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function(ev) {
-      const html = `<h2 contenteditable="true">Imagem</h2>
-        <div class="pe-img-container">
-          <img src="${ev.target.result}" alt="Imagem">
-          <p class="pe-img-caption" contenteditable="true">Clique para adicionar legenda...</p>
-        </div>`;
-      peAddSection(body, html);
+      const sec = { id: secId(), type: 'image', title: 'Imagem', src: ev.target.result, caption: 'Clique para adicionar legenda...' };
+      body.appendChild(sectionRender(sec));
       peAutoSave();
     };
     reader.readAsDataURL(file);
@@ -2124,6 +2304,7 @@ function peAddImage() {
   input.click();
 }
 
+// Not used directly anymore — kept for backward compat if called from outside
 function peAddSection(body, html) {
   const div = document.createElement('div');
   div.className = 'pe-section';
@@ -2132,7 +2313,6 @@ function peAddSection(body, html) {
     <button onclick="peDeleteSection(this)" style="margin-left:auto">Excluir seção</button>
   </div>` + html;
   body.appendChild(div);
-  // Adiciona evento de arrastar na seção
   addSecDrag(div);
 }
 
@@ -2258,7 +2438,8 @@ async function confirmDelSec() {
     delSecCallback.remove();
     clearTimeout(autoSaveTimer);
     if (currentPageKey) {
-      await savePageContent(currentPageKey, document.getElementById('peBody').innerHTML, currentMenuItemId);
+      const data = pageDataExtract(document.getElementById('peBody'));
+      await savePageContent(currentPageKey, data, currentMenuItemId);
       peUpdateTime();
     }
   }
