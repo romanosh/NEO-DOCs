@@ -10,6 +10,5 @@ ALTER TABLE page
 ALTER TABLE page
   ADD COLUMN IF NOT EXISTS data_json JSONB DEFAULT '{"version":1,"sections":[]}';
 
--- 2. Mantém a coluna content como fallback de leitura durante transição,
---    mas ela será ignorada pelo frontend após a migração.
---    Futuramente poderá ser removida com: ALTER TABLE page DROP COLUMN content;
+-- 2. Remove coluna content (agora substituída por data_json)
+ALTER TABLE page DROP COLUMN IF EXISTS content;
