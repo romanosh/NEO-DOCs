@@ -3235,6 +3235,7 @@ async function saveProfileData() {
     if (body.nome) document.getElementById('userAvatarLetters').textContent = nome.substring(0, 2).toUpperCase();
     errEl.style.color = '#1a8a1a';
     errEl.textContent = 'Dados alterados com sucesso.';
+    setTimeout(() => { if (errEl.textContent === 'Dados alterados com sucesso.') { errEl.textContent = ''; errEl.style.color = ''; } }, 5000);
   } catch (e) {
     errEl.textContent = 'Erro de conexão com o servidor.';
   }
@@ -3258,6 +3259,7 @@ async function changeProfilePassword() {
     document.getElementById('profilePassword').value = '';
     errEl.style.color = '#1a8a1a';
     errEl.textContent = 'Senha alterada com sucesso.';
+    setTimeout(() => { if (errEl.textContent === 'Senha alterada com sucesso.') { errEl.textContent = ''; errEl.style.color = ''; } }, 5000);
   } catch (e) {
     errEl.textContent = 'Erro de conexão com o servidor.';
   }
