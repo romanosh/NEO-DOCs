@@ -820,12 +820,15 @@ async function doLogin() {
   const errEl = document.getElementById('loginError');
   if (!input || !password) { errEl.textContent = 'Preencha usuário e senha.'; return; }
   try {
-    // Se não parece email, resolve pelo nome de usuário
+    // Se não parece email, tenta resolver pelo nome de usuário via RPC
     if (!input.includes('@')) {
       try {
         const resolved = await supabaseRpc('get_email_by_nome', { p_nome: input });
-        if (resolved) input = resolved;
-      } catch(e) {}
+        if (resolved) { input = resolved; }
+        else { errEl.textContent = 'Usuário não encontrado.'; return; }
+      } catch(e) {
+        // RPC indisponível — tenta login direto (email pode funcionar se input for email sem @, ou o admin não rodou a migration)
+      }
     }
     const email = input;
     const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
