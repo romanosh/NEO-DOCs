@@ -1003,7 +1003,7 @@ async function resetUserPassword(uid, nome) {
   if (!confirm('Resetar a senha de "' + nome + '" para Estech@1904?')) return;
   try {
     await supabaseRpc('admin_reset_password', { target_user_id: uid, new_password: 'Estech@1904' });
-    alert('Senha de "' + nome + '" resetada para: Estech@1904');
+    alert('Senha de "' + nome + '" resetada com sucesso.');
   } catch(e) { alert(e.message || 'Erro de conexão'); }
 }
 
