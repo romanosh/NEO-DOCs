@@ -3220,11 +3220,17 @@ function initTableSearch() {
     if (!scroll) return;
     if (section.querySelector('.table-search-wrap')) return;
     const h2 = section.querySelector('h2');
-    if (!h2) return;
+    const inner = section.querySelector('.pe-section-inner');
     const wrap = document.createElement('div');
     wrap.className = 'table-search-wrap';
-    h2.parentNode.insertBefore(wrap, h2);
-    wrap.appendChild(h2);
+    if (h2) {
+      h2.parentNode.insertBefore(wrap, h2);
+      wrap.appendChild(h2);
+    } else if (inner) {
+      inner.insertBefore(wrap, inner.firstChild);
+    } else {
+      section.appendChild(wrap);
+    }
     const input = document.createElement('input');
     input.type = 'search';
     input.className = 'table-search-input';
