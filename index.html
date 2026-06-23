@@ -1263,6 +1263,7 @@ function showAddModal(node, forceDir = false) {
   clearAddHighlight();
   pendingAddNode = node;
   pendingAddParentId = node ? node.id : null;
+  console.log('[showAddModal] node:', node?.l, 'id:', node?.id, 'pendingAddParentId:', pendingAddParentId);
   document.getElementById('modalParentName').textContent = node ? node.l : 'Raiz';
   document.getElementById('modalInput').value = '';
   
@@ -1297,14 +1298,18 @@ async function confirmAdd() {
     if (!name) return;
     
     // Resolve o nó pai: busca por ID na árvore atual para evitar referências obsoletas
+    console.log('[confirmAdd] pendingAddParentId:', pendingAddParentId, 'tree length:', tree?.length);
     let parentNode = null;
     if (pendingAddParentId !== null) {
       parentNode = findNodeById(tree, pendingAddParentId);
+      console.log('[confirmAdd] findNodeById result:', parentNode?.l, parentNode?.id);
     }
     if (!parentNode && pendingAddNode) {
+      console.log('[confirmAdd] usando pendingAddNode fallback:', pendingAddNode.l, pendingAddNode.id);
       if (!Array.isArray(pendingAddNode.c)) { alert('Não é possível adicionar itens dentro de uma página.'); return; }
       parentNode = pendingAddNode;
     }
+    console.log('[confirmAdd] parentNode final:', parentNode?.l, 'selectedType:', selectedType);
     
     // Validação: verifica se já existe um item com o mesmo nome no mesmo nível
     const targetArr = parentNode === null ? tree : (parentNode.c || []);
