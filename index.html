@@ -784,12 +784,44 @@ const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzd
 // ── USUÁRIOS / AUTH ──
 const TOKEN_KEY = 'neo_token';
 const USER_KEY  = 'neo_user';
+const REFRESH_KEY = 'neo_refresh_token';
 
 function getAuthHeaders() {
   const t = localStorage.getItem(TOKEN_KEY);
   const h = { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' };
   if (t) h['Authorization'] = 'Bearer ' + t;
   return h;
+}
+
+function decodeJWT(token) {
+  try { return JSON.parse(atob(token.split('.')[1])); } catch(e) { return null; }
+}
+
+async function ensureValidToken() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (!token) return;
+  const payload = decodeJWT(token);
+  if (!payload || !payload.exp) return;
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  if (payload.exp - 30 < Date.now() / 1000 && refreshToken) {
+    try {
+      const r = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken })
+      });
+      const data = await r.json();
+      if (r.ok && data.access_token) {
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_KEY);
+        localStorage.removeItem(USER_KEY);
+        location.reload();
+      }
+    } catch(e) { /* refresh failed — request will likely 401 */ }
+  }
 }
 
 function getCurrentUser() {
@@ -805,6 +837,7 @@ function setCurrentUser(token, user) {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   } else {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
   }
 }
@@ -840,6 +873,7 @@ async function doLogin() {
     if (!r.ok) { errEl.textContent = data.error_description || data.error || 'Erro ao autenticar'; return; }
 
     const token = data.access_token;
+    if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token);
     const authUser = data.user;
     const userId = authUser.id;
 
@@ -1025,6 +1059,7 @@ function flattenTree(nodes, parentTempId) {
 
 // ── PERSISTÊNCIA (Supabase) ──
 async function loadTree() {
+  await ensureValidToken();
   try {
     const r = await fetch(SUPABASE_URL + '/rest/v1/menu_item?order=sort_order.asc', { headers: getAuthHeaders() });
     if (!r.ok) throw new Error('Failed to load tree');
@@ -1036,6 +1071,7 @@ async function loadTree() {
 
 async function saveTree() {
   if (!localStorage.getItem(TOKEN_KEY)) return;
+  await ensureValidToken();
   try {
     _flatCounter = 0;
     const flat = flattenTree(tree, null);
@@ -1320,6 +1356,7 @@ function migrateHtmlToData(html) {
 
 // ── PERSISTÊNCIA (Supabase) — salva/carrega data_json ──
 async function loadPageContent(key, menuItemId) {
+  await ensureValidToken();
   try {
     let row = null;
     if (menuItemId) {
@@ -1343,6 +1380,7 @@ async function loadPageContent(key, menuItemId) {
 }
 
 async function savePageContent(key, data, menuItemId) {
+  await ensureValidToken();
   if (!data || !data.version) data = data ? { version: PAGE_DATA_VERSION, sections: data.sections || [] } : pageDataEmpty();
   try {
     const h = getAuthHeaders();
@@ -3212,6 +3250,7 @@ function showUserProfile() {
 }
 
 async function saveProfileData() {
+  await ensureValidToken();
   const u = getCurrentUser();
   if (!u) return;
   const errEl = document.getElementById('profileDataError');
