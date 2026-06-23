@@ -1048,7 +1048,7 @@ async function addUserFromModal() {
       body: JSON.stringify({ email, password: 'Estech@1904', email_confirm: true, user_metadata: { nome } })
     });
     const data = await r.json();
-    if (!r.ok) { alert(data.msg || 'Erro ao criar usuário'); return; }
+    if (!r.ok) { const m = data.msg || ''; errEl.textContent = m.includes('invalid format') || m.includes('email') ? 'Formato de e-mail inválido.' : m; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
     await supabaseRpc('admin_insert_profile', { p_nome: nome, p_email: email });
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserEmail').value = '';
