@@ -1098,9 +1098,10 @@ async function savePageContent(key, html, menuItemId) {
         return;
       }
     }
-    // No existing page found, insert with menu_item_id
+    // No existing page found, insert with menu_item_id and key
     const payload = { content: html };
     if (menuItemId) payload.menu_item_id = menuItemId;
+    if (key) payload.key = key;
     const r = await fetch(SUPABASE_URL + '/rest/v1/page', {
       method: 'POST', headers: { ...h, 'Prefer': 'return=minimal' },
       body: JSON.stringify(payload)
