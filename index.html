@@ -1054,13 +1054,20 @@ async function addUserFromModal() {
     });
     const data = await r.json();
     if (!r.ok) { const m = data.msg || ''; errEl.textContent = m.includes('invalid format') || m.includes('email') ? 'Formato de e-mail inválido.' : m; errEl.style.opacity = '1'; fadeEl(errEl, 5000); return; }
-    await supabaseRpc('admin_insert_profile', { p_nome: nome, p_email: email });
+    try {
+      await supabaseRpc('admin_insert_profile', { p_nome: nome, p_email: email });
+    } catch(e) {
+      await fetch(SUPABASE_URL + '/rest/v1/profiles', {
+        method: 'POST', headers: { ...getAuthHeaders(), 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ nome, email, role: 'user' })
+      });
+    }
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserEmail').value = '';
     nomeEl.style.borderColor = ''; emailEl.style.borderColor = ''; errEl.textContent = '';
     refreshUserList();
     alert('Usuário "' + nome + '" criado com senha: Estech@1904');
-  } catch(e) { alert('Erro de conexão'); }
+  } catch(e) { errEl.textContent = 'Erro ao criar perfil no banco.'; errEl.style.opacity = '1'; fadeEl(errEl, 8000); }
 }
 
 // ── TREE: flat rows ↔ nested objects ──
