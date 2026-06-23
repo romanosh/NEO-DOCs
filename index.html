@@ -765,6 +765,18 @@
   </div>
 </div>
 
+<!-- MODAL: Resetar senha -->
+<div class="modal-overlay" id="modalResetPass">
+  <div class="modal" style="width:360px">
+    <h3 style="color:var(--danger)">Resetar senha</h3>
+    <p id="resetPassMsg" style="font-size:13px"></p>
+    <div class="modal-actions" style="margin-top:18px">
+      <button class="btn" onclick="closeModal('modalResetPass')">Cancelar</button>
+      <button class="btn btn-danger" onclick="confirmResetPass()">Resetar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Sair -->
 <div class="modal-overlay" id="modalLogout">
   <div class="modal" style="width:360px">
@@ -999,11 +1011,19 @@ async function deleteUser(uid) {
   } catch(e) { alert(e.message || 'Erro de conexão'); }
 }
 
-async function resetUserPassword(uid, nome) {
-  if (!confirm('Resetar a senha de "' + nome + '" para Estech@1904?')) return;
+let _resetUid = null;
+
+function resetUserPassword(uid, nome) {
+  _resetUid = uid;
+  document.getElementById('resetPassMsg').textContent = 'Resetar a senha de "' + nome + '"?';
+  openModal('modalResetPass');
+}
+
+async function confirmResetPass() {
+  closeModal('modalResetPass');
   try {
-    await supabaseRpc('admin_reset_password', { target_user_id: uid, new_password: 'Estech@1904' });
-    alert('Senha de "' + nome + '" resetada com sucesso.');
+    await supabaseRpc('admin_reset_password', { target_user_id: _resetUid, new_password: 'Estech@1904' });
+    alert('Senha resetada com sucesso.');
   } catch(e) { alert(e.message || 'Erro de conexão'); }
 }
 
