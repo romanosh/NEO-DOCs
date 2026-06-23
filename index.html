@@ -3233,7 +3233,8 @@ async function saveProfileData() {
     if (body.email) u.email = email;
     setCurrentUser(localStorage.getItem(TOKEN_KEY), u);
     if (body.nome) document.getElementById('userAvatarLetters').textContent = nome.substring(0, 2).toUpperCase();
-    closeModal('modalProfile');
+    errEl.style.color = '#1a8a1a';
+    errEl.textContent = 'Dados alterados com sucesso.';
   } catch (e) {
     errEl.textContent = 'Erro de conexão com o servidor.';
   }
