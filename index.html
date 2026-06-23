@@ -3221,7 +3221,7 @@ async function saveProfileData() {
   const body = {};
   if (nome && nome !== u.nome) body.nome = nome;
   if (email && email !== u.email) body.email = email;
-  if (!body.nome && !body.email) { closeModal('modalProfile'); return; }
+  if (!body.nome && !body.email) { return; }
   try {
     const r = await fetch(SUPABASE_URL + '/rest/v1/profiles?id=eq.' + u.id, {
       method: 'PATCH',
