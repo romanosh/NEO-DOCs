@@ -22,8 +22,7 @@
   /* SIDEBAR */
   .sidebar { width: var(--sidebar-width); min-width: var(--sidebar-width); background: var(--surface2); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; z-index: 10; }
   .sidebar.collapsed { width: 0 !important; min-width: 0 !important; transition: width var(--tr), min-width var(--tr); }
-  .sidebar-resizer { width: 5px; cursor: col-resize; flex-shrink: 0; background: transparent; position: relative; z-index: 11; transition: background 0.15s; }
-  .sidebar-resizer:hover, .sidebar-resizer:active { background: var(--accent); opacity: 0.4; }
+
   .sb-head { display: flex; align-items: center; gap: 10px; padding: 0 16px; height: var(--header-h); border-bottom: 1px solid var(--border); flex-shrink: 0; white-space: nowrap; }
   .sb-icon { width: 28px; height: 28px; border-radius: 7px; background: var(--accent-bg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .sb-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
@@ -533,9 +532,6 @@
     </div>
     <div class="nav" id="nav"></div>
   </div>
-
-  <!-- SIDEBAR RESIZER -->
-  <div class="sidebar-resizer" id="sidebarResizer"></div>
 
   <!-- MAIN -->
   <div class="main">
