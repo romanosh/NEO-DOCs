@@ -2288,8 +2288,6 @@ async function openPageEditor(node, fullPath) {
       wrap.appendChild(tbl);
     }
   });
-  initTableResize();
-  initTableSearch();
 
   // Footer
   const footer = document.createElement('div');
@@ -2303,6 +2301,8 @@ async function openPageEditor(node, fullPath) {
   editor.appendChild(footer);
   main.appendChild(editor);
 
+  initTableResize();
+  initTableSearch();
   peUpdateTime();
 
   // Start observing for table resize handles
