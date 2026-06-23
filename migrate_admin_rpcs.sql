@@ -47,8 +47,12 @@ LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 DECLARE
   auth_uid UUID;
+  user_email TEXT;
 BEGIN
-  SELECT id INTO auth_uid FROM auth.users WHERE raw_user_meta_data->>'nome' = (SELECT nome FROM profiles WHERE id = target_user_id);
+  SELECT email INTO user_email FROM profiles WHERE id = target_user_id;
+  IF user_email IS NOT NULL THEN
+    SELECT id INTO auth_uid FROM auth.users WHERE email = user_email;
+  END IF;
   DELETE FROM profiles WHERE id = target_user_id;
   IF auth_uid IS NOT NULL THEN
     DELETE FROM auth.users WHERE id = auth_uid;
@@ -66,12 +70,31 @@ LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 DECLARE
   auth_uid UUID;
+  user_email TEXT;
 BEGIN
-  SELECT id INTO auth_uid FROM auth.users WHERE raw_user_meta_data->>'nome' = (SELECT nome FROM profiles WHERE id = target_user_id);
-  IF auth_uid IS NOT NULL THEN
-    UPDATE auth.users SET encrypted_password = crypt(new_password, gen_salt('bf')) WHERE id = auth_uid;
+  SELECT email INTO user_email FROM profiles WHERE id = target_user_id;
+  IF user_email IS NOT NULL THEN
+    SELECT id INTO auth_uid FROM auth.users WHERE email = user_email;
+    IF auth_uid IS NOT NULL THEN
+      UPDATE auth.users SET encrypted_password = crypt(new_password, gen_salt('bf')) WHERE id = auth_uid;
+    END IF;
   END IF;
 END;
 $$;
 
 GRANT EXECUTE ON FUNCTION admin_reset_password(BIGINT, TEXT) TO authenticated;
+
+-- 5. Inserir perfil após criar auth user
+DROP FUNCTION IF EXISTS admin_insert_profile(TEXT, TEXT);
+CREATE OR REPLACE FUNCTION admin_insert_profile(p_nome TEXT, p_email TEXT)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+  INSERT INTO profiles (nome, email, role) VALUES (p_nome, p_email, 'user');
+EXCEPTION WHEN unique_violation THEN
+  UPDATE profiles SET nome = p_nome WHERE email = p_email;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION admin_insert_profile(TEXT, TEXT) TO authenticated;

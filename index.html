@@ -1019,6 +1019,7 @@ async function addUserFromModal() {
     });
     const data = await r.json();
     if (!r.ok) { alert(data.msg || 'Erro ao criar usuário'); return; }
+    await supabaseRpc('admin_insert_profile', { p_nome: nome, p_email: email });
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserEmail').value = '';
     refreshUserList();
