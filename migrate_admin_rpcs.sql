@@ -6,6 +6,7 @@
 
 -- 1. Listar todos os usuários
 DROP FUNCTION IF EXISTS admin_list_users();
+DROP FUNCTION IF EXISTS admin_list_users(UUID);
 CREATE OR REPLACE FUNCTION admin_list_users()
 RETURNS JSON
 LANGUAGE plpgsql SECURITY DEFINER
@@ -28,6 +29,7 @@ GRANT EXECUTE ON FUNCTION admin_list_users() TO authenticated;
 
 -- 2. Atualizar role de um usuário
 DROP FUNCTION IF EXISTS admin_update_role(BIGINT, TEXT);
+DROP FUNCTION IF EXISTS admin_update_role(UUID, TEXT);
 CREATE OR REPLACE FUNCTION admin_update_role(target_user_id BIGINT, new_role TEXT)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -41,6 +43,7 @@ GRANT EXECUTE ON FUNCTION admin_update_role(BIGINT, TEXT) TO authenticated;
 
 -- 3. Excluir um usuário (auth + profile)
 DROP FUNCTION IF EXISTS admin_delete_user(BIGINT);
+DROP FUNCTION IF EXISTS admin_delete_user(UUID);
 CREATE OR REPLACE FUNCTION admin_delete_user(target_user_id BIGINT)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
@@ -64,6 +67,7 @@ GRANT EXECUTE ON FUNCTION admin_delete_user(BIGINT) TO authenticated;
 
 -- 4. Resetar senha de um usuário
 DROP FUNCTION IF EXISTS admin_reset_password(BIGINT, TEXT);
+DROP FUNCTION IF EXISTS admin_reset_password(UUID, TEXT);
 CREATE OR REPLACE FUNCTION admin_reset_password(target_user_id BIGINT, new_password TEXT)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
