@@ -1066,7 +1066,7 @@ async function addUserFromModal() {
     document.getElementById('newUserEmail').value = '';
     nomeEl.style.borderColor = ''; emailEl.style.borderColor = ''; errEl.textContent = '';
     refreshUserList();
-    alert('Usuário "' + nome + '" criado com senha: Estech@1904');
+    errEl.style.color = '#1a8a1a'; errEl.textContent = 'Usuário criado com sucesso.'; errEl.style.opacity = '1'; fadeEl(errEl, 5000);
   } catch(e) { errEl.textContent = 'Erro ao criar perfil no banco.'; errEl.style.opacity = '1'; fadeEl(errEl, 8000); }
 }
 
