@@ -3228,7 +3228,7 @@ async function saveProfileData() {
       headers: getAuthHeaders(),
       body: JSON.stringify(body)
     });
-    if (!r.ok) { errEl.textContent = 'Erro ao salvar'; return; }
+    if (!r.ok) { const txt = await r.text().catch(()=>''); errEl.textContent = 'Erro ao salvar: ' + r.status + ' ' + txt.substring(0,80); return; }
     if (body.nome) u.nome = nome;
     if (body.email) u.email = email;
     setCurrentUser(localStorage.getItem(TOKEN_KEY), u);
