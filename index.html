@@ -1196,18 +1196,16 @@ function pageDataExtract(bodyEl) {
   const secEls = bodyEl ? bodyEl.querySelectorAll(':scope > .pe-section') : [];
   secEls.forEach(secEl => {
     const type = secEl.dataset.secType || 'text';
-    const inner = secEl.querySelector('.pe-section-inner');
-    if (!inner) return;
     let data = { id: secEl.dataset.secId, type };
     switch (type) {
       case 'text':
-        data = extractSectionText(inner, data);
+        data = extractSectionText(secEl, data);
         break;
       case 'table':
-        data = extractSectionTable(inner, data);
+        data = extractSectionTable(secEl, data);
         break;
       case 'image':
-        data = extractSectionImage(inner, data);
+        data = extractSectionImage(secEl, data);
         break;
     }
     sections.push(data);
@@ -1215,20 +1213,20 @@ function pageDataExtract(bodyEl) {
   return { version: PAGE_DATA_VERSION, sections };
 }
 
-function extractSectionText(inner, data) {
-  const h2 = inner.querySelector(':scope > h2');
+function extractSectionText(secEl, data) {
+  const h2 = secEl.querySelector('h2');
   if (h2) data.title = h2.innerText.trim();
-  const ps = inner.querySelectorAll(':scope > p');
+  const ps = secEl.querySelectorAll('p');
   if (ps.length > 0) {
     data.paragraphs = Array.from(ps).map(p => p.innerText.trim());
   }
   return data;
 }
 
-function extractSectionTable(inner, data) {
-  const h2 = inner.querySelector(':scope > h2');
+function extractSectionTable(secEl, data) {
+  const h2 = secEl.querySelector('h2');
   if (h2) data.title = h2.innerText.trim();
-  const table = inner.querySelector('table');
+  const table = secEl.querySelector('table');
   if (table) {
     const thead = table.querySelector('thead');
     const tbody = table.querySelector('tbody');
@@ -1244,12 +1242,12 @@ function extractSectionTable(inner, data) {
   return data;
 }
 
-function extractSectionImage(inner, data) {
-  const h2 = inner.querySelector(':scope > h2');
+function extractSectionImage(secEl, data) {
+  const h2 = secEl.querySelector('h2');
   if (h2) data.title = h2.innerText.trim();
-  const img = inner.querySelector('img');
+  const img = secEl.querySelector('img');
   if (img) data.src = img.getAttribute('src') || '';
-  const cap = inner.querySelector('.pe-img-caption');
+  const cap = secEl.querySelector('.pe-img-caption');
   if (cap) data.caption = cap.innerText.trim();
   return data;
 }
