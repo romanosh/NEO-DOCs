@@ -980,8 +980,8 @@ let _userList = [];
 async function refreshUserList() {
   const users = await loadUsers();
   _userList = users;
-  const q = (document.getElementById('userSearch').value || '').toLowerCase();
-  const filtered = q ? users.filter(u => u.nome.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)) : users;
+  const q = norm(document.getElementById('userSearch').value);
+  const filtered = q ? users.filter(u => norm(u.nome).includes(q) || norm(u.email).includes(q)) : users;
   const list = document.getElementById('userList');
   const currentUser = getCurrentUser();
   list.innerHTML = filtered.map(u => {
@@ -2080,11 +2080,13 @@ function resetToInitial() {
 }
 
 // ── BUSCA ──
+function norm(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+
 function filterNav(query) {
-  const q = query.toLowerCase().trim();
+  const q = norm(query);
   document.querySelectorAll('.ni').forEach(el => {
     if (!q) { el.classList.remove('hidden'); return; }
-    const match = (el.dataset.label || '').includes(q);
+    const match = norm(el.dataset.label).includes(q);
     el.classList.toggle('hidden', !match);
     if (match) {
       let p = el.parentElement;
@@ -2508,7 +2510,7 @@ function peUpdateTime() {
 
 // Filtra cards na página baseado no texto pesquisado
 function filterPageContent(query) {
-  const q = query.toLowerCase().trim();
+  const q = norm(query);
   const sections = document.querySelectorAll('#peBody .pe-section');  
   
   sections.forEach(section => {
@@ -2517,7 +2519,7 @@ function filterPageContent(query) {
       return;
     }
     
-    const content = section.textContent.toLowerCase();
+    const content = norm(section.textContent);
     if (content.includes(q)) {
       section.style.display = 'block';
     } else {
@@ -3396,14 +3398,14 @@ document.addEventListener('input', function(e) {
   if (!scroll) return;
   const table = scroll.querySelector('table');
   if (!table) return;
-  const q = input.value.toLowerCase().trim();
+  const q = norm(input.value);
   const header = table.querySelector('thead');
   for (let i = 0; i < table.rows.length; i++) {
     const row = table.rows[i];
     if (header && row.closest('thead')) continue;
     if (!q) { row.style.display = ''; continue; }
     const match = Array.from(row.cells).some(cell =>
-      (cell.textContent || '').toLowerCase().includes(q)
+      norm(cell.textContent).includes(q)
     );
     row.style.display = match ? '' : 'none';
   }
