@@ -1252,7 +1252,9 @@ function sectionRender(sec, idx) {
 function renderSectionText(inner, sec) {
   let html = '';
   if (sec.title) {
-    html += `<h2 contenteditable="true" data-field="title">${escapeHtml(sec.title)}</h2>`;
+    const t = typeof sec.title === 'object' ? sec.title.html : escapeHtml(sec.title);
+    const tStyle = typeof sec.title === 'object' && sec.title.style ? ` style="${escapeHtml(sec.title.style)}"` : '';
+    html += `<h2 contenteditable="true" data-field="title"${tStyle}>${t}</h2>`;
   }
   if (sec.paragraphs && sec.paragraphs.length > 0) {
     sec.paragraphs.forEach(p => {
@@ -1269,7 +1271,9 @@ function renderSectionText(inner, sec) {
 function renderSectionTable(inner, sec) {
   let html = '';
   if (sec.title) {
-    html += `<h2 contenteditable="true" data-field="title">${escapeHtml(sec.title)}</h2>`;
+    const t = typeof sec.title === 'object' ? sec.title.html : escapeHtml(sec.title);
+    const tStyle = typeof sec.title === 'object' && sec.title.style ? ` style="${escapeHtml(sec.title.style)}"` : '';
+    html += `<h2 contenteditable="true" data-field="title"${tStyle}>${t}</h2>`;
   }
   html += `<div class="table-scroll"><table contenteditable="true"><thead><tr>`;
   const headers = sec.headers || [''];
@@ -1301,7 +1305,9 @@ function renderSectionTable(inner, sec) {
 function renderSectionImage(inner, sec) {
   let html = '';
   if (sec.title) {
-    html += `<h2 contenteditable="true" data-field="title">${escapeHtml(sec.title)}</h2>`;
+    const t = typeof sec.title === 'object' ? sec.title.html : escapeHtml(sec.title);
+    const tStyle = typeof sec.title === 'object' && sec.title.style ? ` style="${escapeHtml(sec.title.style)}"` : '';
+    html += `<h2 contenteditable="true" data-field="title"${tStyle}>${t}</h2>`;
   }
   html += `<div class="pe-img-container">
     <img src="${escapeHtml(sec.src || '')}" alt="Imagem">
@@ -1346,7 +1352,11 @@ function pageDataExtractStyles(bodyEl) {
     const type = secEl.dataset.secType || 'text';
     const data = { id: secEl.dataset.secId, type };
     const h2 = secEl.querySelector('h2');
-    if (h2) data.title = h2.innerHTML.trim();
+    if (h2) {
+      const thtml = h2.innerHTML.trim();
+      const tstyle = h2.getAttribute('style');
+      data.title = tstyle ? { html: thtml, style: tstyle } : thtml;
+    }
     switch (type) {
       case 'text': {
         const ps = secEl.querySelectorAll('p');
