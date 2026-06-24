@@ -1256,7 +1256,9 @@ function renderSectionText(inner, sec) {
   }
   if (sec.paragraphs && sec.paragraphs.length > 0) {
     sec.paragraphs.forEach(p => {
-      html += `<p contenteditable="true" data-field="p">${escapeHtml(p)}</p>`;
+      const content = typeof p === 'object' ? p.html : p;
+      const style = typeof p === 'object' && p.style ? ` style="${escapeHtml(p.style)}"` : '';
+      html += `<p contenteditable="true" data-field="p"${style}>${(content || '').trim() || '<br>'}</p>`;
     });
   } else {
     html += `<p contenteditable="true" data-field="p"><br></p>`;
@@ -1272,16 +1274,19 @@ function renderSectionTable(inner, sec) {
   html += `<div class="table-scroll"><table contenteditable="true"><thead><tr>`;
   const headers = sec.headers || [''];
   headers.forEach(h => {
-    const v = (h || '').trim();
-    html += `<th>${v ? escapeHtml(v) : '<br>'}</th>`;
+    const content = typeof h === 'object' ? h.html : h;
+    const style = typeof h === 'object' && h.style ? ` style="${escapeHtml(h.style)}"` : '';
+    html += `<th${style}>${(content || '').trim() || '<br>'}</th>`;
   });
   html += `</tr></thead><tbody>`;
   const rows = sec.rows || [['']];
   rows.forEach(row => {
     html += `<tr>`;
     for (let i = 0; i < Math.max(row.length, 1); i++) {
-      const v = (row[i] || '').trim();
-      html += `<td>${v ? escapeHtml(v) : '<br>'}</td>`;
+      const cell = row[i];
+      const content = typeof cell === 'object' ? cell.html : cell;
+      const style = typeof cell === 'object' && cell.style ? ` style="${escapeHtml(cell.style)}"` : '';
+      html += `<td${style}>${(content || '').trim() || '<br>'}</td>`;
     }
     html += `</tr>`;
   });
@@ -1327,6 +1332,64 @@ function pageDataExtract(bodyEl) {
       case 'image':
         data = extractSectionImage(secEl, data);
         break;
+    }
+    sections.push(data);
+  });
+  return { version: PAGE_DATA_VERSION, sections };
+}
+
+function pageDataExtractStyles(bodyEl) {
+  if (!bodyEl) return null;
+  const sections = [];
+  const secEls = bodyEl.querySelectorAll(':scope > .pe-section');
+  secEls.forEach(secEl => {
+    const type = secEl.dataset.secType || 'text';
+    const data = { id: secEl.dataset.secId, type };
+    const h2 = secEl.querySelector('h2');
+    if (h2) data.title = h2.innerHTML.trim();
+    switch (type) {
+      case 'text': {
+        const ps = secEl.querySelectorAll('p');
+        if (ps.length > 0) {
+          data.paragraphs = Array.from(ps).map(p => {
+            const html = p.innerHTML.trim();
+            const style = p.getAttribute('style');
+            return style ? { html, style } : html;
+          });
+        }
+        break;
+      }
+      case 'table': {
+        const table = secEl.querySelector('table');
+        if (table) {
+          const thead = table.querySelector('thead');
+          const tbody = table.querySelector('tbody');
+          if (thead && thead.rows[0]) {
+            data.headers = Array.from(thead.rows[0].cells).map(c => {
+              const html = c.innerHTML.trim();
+              const style = c.getAttribute('style');
+              return style ? { html, style } : html;
+            });
+          }
+          if (tbody) {
+            data.rows = Array.from(tbody.rows).map(row =>
+              Array.from(row.cells).map(c => {
+                const html = c.innerHTML.trim();
+                const style = c.getAttribute('style');
+                return style ? { html, style } : html;
+              })
+            );
+          }
+        }
+        break;
+      }
+      case 'image': {
+        const img = secEl.querySelector('img');
+        if (img) data.src = img.getAttribute('src') || '';
+        const cap = secEl.querySelector('.pe-img-caption');
+        if (cap) data.caption = cap.innerHTML.trim();
+        break;
+      }
     }
     sections.push(data);
   });
@@ -1433,18 +1496,22 @@ async function loadPageContent(key, menuItemId) {
   try {
     let row = null;
     if (menuItemId) {
-      const r = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id,template_type,data_json', { headers: getAuthHeaders() });
+      const r = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id,template_type,data_json,style_json', { headers: getAuthHeaders() });
       const data = await r.json();
       if (data && data[0]) row = data[0];
     }
     if (!row) {
-      const r = await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key) + '&select=id,template_type,data_json', { headers: getAuthHeaders() });
+      const r = await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key) + '&select=id,template_type,data_json,style_json', { headers: getAuthHeaders() });
       const data = await r.json();
       if (data && data[0]) row = data[0];
     }
     if (row) {
       if (row.data_json && typeof row.data_json === 'object') {
-        return upgradePageData(row.data_json);
+        const data = upgradePageData(row.data_json);
+        if (row.style_json && row.style_json.sections) {
+          mergeStyleData(data, row.style_json);
+        }
+        return data;
       }
       // Sem data_json — página vazia (coluna content foi removida)
     }
@@ -1457,7 +1524,9 @@ async function savePageContent(key, data, menuItemId) {
   if (!data || !data.version) data = data ? { version: PAGE_DATA_VERSION, sections: data.sections || [] } : pageDataEmpty();
   try {
     const h = getAuthHeaders();
-    const payload = { data_json: data, template_type: 'blank' };
+
+    const styles = pageDataExtractStyles(document.getElementById('peBody'));
+    const payload = { data_json: data, style_json: styles, template_type: 'blank' };
     if (menuItemId) payload.menu_item_id = menuItemId;
     if (key) payload.key = key;
     if (menuItemId) {
@@ -1491,6 +1560,35 @@ function upgradePageData(data) {
   // Versões futuras: aplicar migrações aqui
   if (!data.version) data.version = PAGE_DATA_VERSION;
   return data;
+}
+
+function mergeStyleData(data, styles) {
+  if (!data.sections || !styles.sections) return;
+  const styleMap = {};
+  styles.sections.forEach(s => { if (s.id) styleMap[s.id] = s; });
+  data.sections.forEach(sec => {
+    const st = styleMap[sec.id];
+    if (!st || st.type !== sec.type) return;
+    if (st.title) sec.title = st.title;
+    if (st.paragraphs && sec.paragraphs) {
+      for (let i = 0; i < Math.min(sec.paragraphs.length, st.paragraphs.length); i++) {
+        sec.paragraphs[i] = st.paragraphs[i];
+      }
+    }
+    if (st.headers && sec.headers) {
+      for (let i = 0; i < Math.min(sec.headers.length, st.headers.length); i++) {
+        sec.headers[i] = st.headers[i];
+      }
+    }
+    if (st.rows && sec.rows) {
+      for (let i = 0; i < Math.min(sec.rows.length, st.rows.length); i++) {
+        for (let j = 0; j < Math.min(sec.rows[i].length, st.rows[i].length); j++) {
+          sec.rows[i][j] = st.rows[i][j];
+        }
+      }
+    }
+    if (st.caption) sec.caption = st.caption;
+  });
 }
 
 // ── ESTADO ──
@@ -2571,6 +2669,7 @@ async function confirmDelSec() {
 // ── TABLE FORMAT BAR ──
 function tblFormat(cmd) {
   document.execCommand(cmd, false, null);
+  peAutoSave();
 }
 
 function toggleAlignMenu() {
@@ -2584,6 +2683,7 @@ function toggleAlignMenu() {
 function execAlign(cmd) {
   document.execCommand(cmd, false, null);
   document.getElementById('alignPopup').classList.remove('open');
+  peAutoSave();
 }
 
 function clearRowFixedHeight(row) {
@@ -2681,6 +2781,7 @@ function resetFontColor() {
   const defaultColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#333';
   document.execCommand('styleWithCSS', false, true);
   document.execCommand('foreColor', false, defaultColor);
+  peAutoSave();
 }
 
 document.addEventListener('click', function(e) {
@@ -2708,7 +2809,6 @@ function applyFontColor(color) {
     document.execCommand('styleWithCSS', false, true);
     document.execCommand('foreColor', false, color);
   } catch(e) {
-    // Fallback: strip existing color spans and wrap
     const range = sel.getRangeAt(0);
     const frag = range.extractContents();
     frag.querySelectorAll('[style]').forEach(el => {
@@ -2720,6 +2820,7 @@ function applyFontColor(color) {
     span.appendChild(frag);
     range.insertNode(span);
   }
+  peAutoSave();
 }
 
 // ── FONT SIZE SELECTOR ──
