@@ -1496,26 +1496,33 @@ async function loadPageContent(key, menuItemId) {
   try {
     let row = null;
     if (menuItemId) {
-      const r = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id,template_type,data_json,style_json', { headers: getAuthHeaders() });
+      const r = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id,template_type,data_json', { headers: getAuthHeaders() });
       const data = await r.json();
       if (data && data[0]) row = data[0];
     }
     if (!row) {
-      const r = await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key) + '&select=id,template_type,data_json,style_json', { headers: getAuthHeaders() });
+      const r = await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key) + '&select=id,template_type,data_json', { headers: getAuthHeaders() });
       const data = await r.json();
       if (data && data[0]) row = data[0];
     }
     if (row) {
       if (row.data_json && typeof row.data_json === 'object') {
         const data = upgradePageData(row.data_json);
-        if (row.style_json && row.style_json.sections) {
-          if (row.style_json.sections.length > 0) {
-            mergeStyleData(data, row.style_json);
+        // Tenta carregar style_json separadamente (coluna pode não existir)
+        try {
+          const sfx = menuItemId
+            ? 'menu_item_id=eq.' + encodeURIComponent(menuItemId)
+            : 'key=eq.' + encodeURIComponent(key);
+          const sr = await fetch(SUPABASE_URL + '/rest/v1/page?' + sfx + '&select=style_json', { headers: getAuthHeaders() });
+          if (sr.ok) {
+            const sData = await sr.json();
+            if (sData && sData[0] && sData[0].style_json && sData[0].style_json.sections && sData[0].style_json.sections.length) {
+              mergeStyleData(data, sData[0].style_json);
+            }
           }
-        }
+        } catch(e) { /* coluna style_json pode não existir — ignorar */ }
         return data;
       }
-      // Sem data_json — página vazia (coluna content foi removida)
     }
   } catch(e) { console.error('loadPageContent error:', e); }
   return pageDataEmpty();
