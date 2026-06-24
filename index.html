@@ -1353,9 +1353,7 @@ function pageDataExtractStyles(bodyEl) {
     const data = { id: secEl.dataset.secId, type };
     const h2 = secEl.querySelector('h2');
     if (h2) {
-      const thtml = h2.innerHTML.trim();
-      const tstyle = h2.getAttribute('style');
-      data.title = tstyle ? { html: thtml, style: tstyle } : thtml;
+      data.title = { html: h2.innerHTML.trim(), style: h2.getAttribute('style') || '' };
     }
     switch (type) {
       case 'text': {
