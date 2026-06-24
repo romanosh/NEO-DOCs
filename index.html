@@ -1509,7 +1509,9 @@ async function loadPageContent(key, menuItemId) {
       if (row.data_json && typeof row.data_json === 'object') {
         const data = upgradePageData(row.data_json);
         if (row.style_json && row.style_json.sections) {
-          mergeStyleData(data, row.style_json);
+          if (row.style_json.sections.length > 0) {
+            mergeStyleData(data, row.style_json);
+          }
         }
         return data;
       }
@@ -1525,7 +1527,11 @@ async function savePageContent(key, data, menuItemId) {
   try {
     const h = getAuthHeaders();
 
-    const styles = pageDataExtractStyles(document.getElementById('peBody'));
+    const peBody = document.getElementById('peBody');
+    const styles = pageDataExtractStyles(peBody);
+    if (!peBody) console.error('savePageContent: #peBody not found');
+    else if (!styles) console.error('savePageContent: pageDataExtractStyles returned null');
+    else if (styles.sections && styles.sections.length === 0) console.error('savePageContent: 0 sections extracted');
     const payload = { data_json: data, style_json: styles, template_type: 'blank' };
     if (menuItemId) payload.menu_item_id = menuItemId;
     if (key) payload.key = key;
