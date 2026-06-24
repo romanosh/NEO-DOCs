@@ -223,8 +223,11 @@
   #dndToast.error { background: var(--danger); }
 
   /* ── PAGE EDITOR ── */
-  .page-editor { display: flex; flex-direction: column; width: 100%; flex: 1; min-height: 0; animation: fadeIn .15s ease; }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .page-editor { display: flex; flex-direction: column; width: 100%; flex: 1; min-height: 0; }
+  .page-editor.fade-in { animation: fadeIn .25s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  #mainContent.fade-out { animation: fadeOut .15s ease-in; }
+  @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
 
   .page-toolbar {
     background: #2c3e50;
@@ -2388,6 +2391,8 @@ async function openPageEditor(node, fullPath) {
 
   const main = document.getElementById('mainContent');
   main.classList.remove('centered');
+  main.classList.add('fade-out');
+  await new Promise(r => setTimeout(r, 150));
   main.innerHTML = '';
 
   // Toolbar
@@ -2437,7 +2442,7 @@ async function openPageEditor(node, fullPath) {
   footer.innerHTML = `<span>${node.l} — Última atualização: <span id="peLastUpdate"></span></span>`;
 
   const editor = document.createElement('div');
-  editor.className = 'page-editor';
+  editor.className = 'page-editor fade-in';
   editor.appendChild(toolbar);
   editor.appendChild(body);
   editor.appendChild(footer);
