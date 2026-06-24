@@ -1527,37 +1527,54 @@ async function savePageContent(key, data, menuItemId) {
   try {
     const h = getAuthHeaders();
 
-    const peBody = document.getElementById('peBody');
-    const styles = pageDataExtractStyles(peBody);
-    if (!peBody) console.error('savePageContent: #peBody not found');
-    else if (!styles) console.error('savePageContent: pageDataExtractStyles returned null');
-    else if (styles.sections && styles.sections.length === 0) console.error('savePageContent: 0 sections extracted');
-    const payload = { data_json: data, style_json: styles, template_type: 'blank' };
-    if (menuItemId) payload.menu_item_id = menuItemId;
-    if (key) payload.key = key;
-    if (menuItemId) {
-      const existRes = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id', { headers: h });
-      const existData = await existRes.json();
-      if (existData && existData[0]) {
-        await fetch(SUPABASE_URL + '/rest/v1/page?id=eq.' + existData[0].id, {
+    // style_json — opcional. Se coluna não existir no Supabase, tenta sem ela
+    let stylePayload = null;
+    try {
+      stylePayload = pageDataExtractStyles(document.getElementById('peBody'));
+    } catch(e) { console.error('style_json extraction error:', e); }
+
+    async function doSave(payload) {
+      if (menuItemId) {
+        const existRes = await fetch(SUPABASE_URL + '/rest/v1/page?menu_item_id=eq.' + menuItemId + '&select=id', { headers: h });
+        const existData = await existRes.json();
+        if (existData && existData[0]) {
+          const res = await fetch(SUPABASE_URL + '/rest/v1/page?id=eq.' + existData[0].id, {
+            method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
+            body: JSON.stringify(payload)
+          });
+          return res;
+        }
+      }
+      const r = await fetch(SUPABASE_URL + '/rest/v1/page', {
+        method: 'POST', headers: { ...h, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(payload)
+      });
+      if (r.status === 409 && key) {
+        return await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key), {
           method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
           body: JSON.stringify(payload)
         });
-        return;
       }
+      return r;
     }
-    const r = await fetch(SUPABASE_URL + '/rest/v1/page', {
-      method: 'POST', headers: { ...h, 'Prefer': 'return=minimal' },
-      body: JSON.stringify(payload)
-    });
-    if (r.status === 409 && key) {
-      await fetch(SUPABASE_URL + '/rest/v1/page?key=eq.' + encodeURIComponent(key), {
-        method: 'PATCH', headers: { ...h, 'Prefer': 'return=minimal' },
-        body: JSON.stringify(payload)
-      });
+
+    // Tenta salvar com style_json
+    const payload = { data_json: data, style_json: stylePayload, template_type: 'blank' };
+    if (menuItemId) payload.menu_item_id = menuItemId;
+    if (key) payload.key = key;
+
+    let res = await doSave(payload);
+    // Se falhou (ex: coluna style_json não existe), tenta sem style_json
+    if (!res.ok && stylePayload !== null) {
+      console.warn('Save with style_json failed, retrying without:', res.status);
+      const fallback = { data_json: data, template_type: 'blank' };
+      if (menuItemId) fallback.menu_item_id = menuItemId;
+      if (key) fallback.key = key;
+      res = await doSave(fallback);
     }
+    if (!res.ok) console.error('Save failed:', res.status, await res.text().catch(()=>''));
   } catch(e) {
-    console.error('Save failed:', e);
+    console.error('Save error:', e);
   }
 }
 
