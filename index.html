@@ -2375,7 +2375,12 @@ let currentPageKey = null;
 let currentMenuItemId = null;
 let autoSaveTimer = null;
 
+let _openingPage = false;
+
 async function openPageEditor(node, fullPath) {
+  if (_openingPage) return;
+  _openingPage = true;
+  try {
   const key = pageKey(fullPath);
   currentPageKey = key;
   currentMenuItemId = node.id || null;
@@ -2482,6 +2487,7 @@ async function openPageEditor(node, fullPath) {
       }
     });
   }
+  } finally { _openingPage = false; }
 }
 
 function peAutoSave() {
